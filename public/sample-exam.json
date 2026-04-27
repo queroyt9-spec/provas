@@ -1,0 +1,89 @@
+{
+  "exam": {
+    "id": "furb_sed_sc_2024_prof_anos_iniciais",
+    "title": "Professor – Anos Iniciais do Ensino Fundamental",
+    "year": 2024,
+    "board": "FURB",
+    "agency": "SED/SC",
+    "role": "Professor",
+    "area": "Anos Iniciais do Ensino Fundamental",
+    "tags": ["FURB", "SED/SC", "Pedagogia", "Anos Iniciais"]
+  },
+  "questions": [
+    {
+      "number": 1,
+      "area": "Conhecimentos Gerais",
+      "topic": "Legislação educacional",
+      "statement": "De acordo com a Lei de Diretrizes e Bases da Educação Nacional (LDB – Lei nº 9.394/1996), qual é a finalidade do ensino fundamental?",
+      "alternatives": {
+        "A": "Preparar o aluno exclusivamente para o mercado de trabalho.",
+        "B": "Desenvolver a capacidade de aprender, tendo como meios básicos o pleno domínio da leitura, da escrita e do cálculo.",
+        "C": "Garantir ao aluno formação superior obrigatória.",
+        "D": "Substituir a educação infantil nos primeiros anos de vida.",
+        "E": "Assegurar exclusivamente a formação religiosa do educando."
+      },
+      "correct_answer": "B",
+      "explanation": "O Art. 32 da LDB estabelece que o ensino fundamental obrigatório tem por objetivo a formação básica do cidadão, mediante o desenvolvimento da capacidade de aprender, tendo como meios básicos o pleno domínio da leitura, da escrita e do cálculo."
+    },
+    {
+      "number": 2,
+      "area": "Metodologia da Prática Docente",
+      "topic": "Avaliação formativa",
+      "statement": "Qual das alternativas abaixo melhor descreve a avaliação formativa no contexto do ensino fundamental?",
+      "alternatives": {
+        "A": "Avaliação realizada exclusivamente no final do ano letivo para aprovar ou reprovar o aluno.",
+        "B": "Avaliação pontual aplicada somente por meio de provas escritas e com fins classificatórios.",
+        "C": "Processo contínuo de acompanhamento da aprendizagem que orienta as intervenções pedagógicas ao longo do processo.",
+        "D": "Instrumento de controle disciplinar dos alunos pela equipe pedagógica.",
+        "E": "Avaliação realizada apenas por agentes externos à escola."
+      },
+      "correct_answer": "C",
+      "explanation": "A avaliação formativa é um processo contínuo e diagnóstico, cujo objetivo principal é acompanhar a aprendizagem do aluno e orientar a prática docente, permitindo intervenções pedagógicas oportunas."
+    },
+    {
+      "number": 3,
+      "area": "Conhecimentos Específicos",
+      "topic": "Alfabetização e letramento",
+      "statement": "O conceito de letramento, desenvolvido por Magda Soares, difere do conceito de alfabetização porque:",
+      "alternatives": {
+        "A": "Letramento refere-se apenas à capacidade de decodificar letras e sons.",
+        "B": "Letramento diz respeito ao uso social da leitura e da escrita nas práticas cotidianas, além da simples decodificação.",
+        "C": "Alfabetização abrange práticas sociais de leitura, enquanto letramento se restringe ao domínio do código escrito.",
+        "D": "Letramento e alfabetização são conceitos completamente idênticos na literatura educacional brasileira.",
+        "E": "Letramento é um processo exclusivo do ensino médio."
+      },
+      "correct_answer": "B",
+      "explanation": "Magda Soares distingue alfabetização (aquisição do sistema de escrita, codificação e decodificação) de letramento (uso competente e significativo da língua escrita nas práticas sociais), ressaltando que ambos devem ocorrer de forma simultânea e integrada."
+    },
+    {
+      "number": 4,
+      "area": "Conhecimentos Gerais",
+      "topic": "Estatuto da Criança e do Adolescente",
+      "statement": "De acordo com o Estatuto da Criança e do Adolescente (ECA – Lei nº 8.069/1990), a criança tem direito à:",
+      "alternatives": {
+        "A": "Educação somente se os pais puderem arcar com os custos.",
+        "B": "Educação, à saúde, ao lazer, à alimentação, à cultura, à dignidade, ao respeito, à liberdade e à convivência familiar e comunitária.",
+        "C": "Educação obrigatória somente a partir dos 7 anos de idade.",
+        "D": "Trabalho informal a partir dos 12 anos para auxiliar a família.",
+        "E": "Proteção apenas no ambiente escolar, sem responsabilidade estatal fora dele."
+      },
+      "correct_answer": "B",
+      "explanation": "O Art. 4º do ECA assegura que é dever da família, da comunidade, da sociedade em geral e do Poder Público assegurar, com absoluta prioridade, a efetivação dos direitos referentes à vida, à saúde, à alimentação, à educação, ao esporte, ao lazer, à profissionalização, à cultura, à dignidade, ao respeito, à liberdade e à convivência familiar e comunitária."
+    },
+    {
+      "number": 5,
+      "area": "Metodologia da Prática Docente",
+      "topic": "Planejamento pedagógico",
+      "statement": "No planejamento pedagógico para os anos iniciais do ensino fundamental, qual das opções abaixo representa uma prática adequada segundo as diretrizes curriculares nacionais?",
+      "alternatives": {
+        "A": "Planejar atividades sem levar em conta o contexto sociocultural dos alunos.",
+        "B": "Definir objetivos, selecionar conteúdos, organizar estratégias e prever avaliações de modo articulado com a Base Nacional Comum Curricular (BNCC).",
+        "C": "Utilizar exclusivamente o livro didático como único recurso pedagógico.",
+        "D": "Ignorar as habilidades e competências previstas para cada ano escolar.",
+        "E": "Realizar o planejamento apenas no início do ano letivo, sem revisões posteriores."
+      },
+      "correct_answer": "B",
+      "explanation": "O planejamento pedagógico eficaz deve articular objetivos, conteúdos, metodologias e avaliação de forma coerente com a BNCC, considerando o contexto dos alunos e sendo revisado continuamente ao longo do processo de ensino-aprendizagem."
+    }
+  ]
+}
