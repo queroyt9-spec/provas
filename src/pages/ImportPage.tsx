@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import type { ImportPayload, Exam, Question } from '../types'
-import { saveExam, saveQuestions, getExams, getQuestions, exportBackup, importBackup, type BackupData } from '../utils/storage'
-import { saveMedia, getMediaObjectUrl, deleteMedia, listMediaIds } from '../utils/mediaStorage'
+import { useData } from '../contexts/DataContext'
+import { useAuth } from '../contexts/AuthContext'
+import { downloadBackup, parseBackup, type BackupData } from '../utils/storage'
 
 function buildContinuationPrompt(exam: Exam): string {
   return `Você é um extrator de questões de concurso.
@@ -157,31 +158,22 @@ type PreviewState = {
   duplicate: boolean
 }
 
-/** Extrai o trecho do texto ao redor da posição do erro para ajudar na inspeção */
 function getErrorSnippet(text: string, err: unknown): string {
   if (!(err instanceof SyntaxError)) return ''
-  // SyntaxError.message geralmente contém "at position N"
   const match = err.message.match(/at position (\d+)/)
   if (!match) return ''
-  const pos = parseInt(match[1], 10)
+  const pos   = parseInt(match[1], 10)
   const start = Math.max(0, pos - 80)
-  const end = Math.min(text.length, pos + 80)
-  const before = text.slice(start, pos)
-  const after = text.slice(pos, end)
-  return `Trecho com problema (↓ aqui):\n...${before}◀ERRO▶${after}...`
+  const end   = Math.min(text.length, pos + 80)
+  return `Trecho com problema (↓ aqui):\n...${text.slice(start, pos)}◀ERRO▶${text.slice(pos, end)}...`
 }
 
-/**
- * Remove marcadores de código que o ChatGPT costuma adicionar ao redor do JSON:
- *   ```json ... ```  ou  ``` ... ```
- * Também remove BOM e espaços extras nas bordas.
- */
 function cleanJson(raw: string): string {
   return raw
     .trim()
-    .replace(/^\uFEFF/, '')                   // BOM
-    .replace(/^```(?:json)?\s*/i, '')         // abertura ```json ou ```
-    .replace(/\s*```\s*$/, '')                // fechamento ```
+    .replace(/^\uFEFF/, '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
     .trim()
 }
 
@@ -221,7 +213,71 @@ function parsePayload(raw: ImportPayload): { exam: Exam; questions: Question[] }
   return { exam, questions }
 }
 
+// ── Backup ────────────────────────────────────────────────────────────────────
+function BackupCard() {
+  const data = useData()
+  const [restoreStatus, setRestoreStatus] = useState<'idle' | 'ok' | 'err'>('idle')
+  const [restoreMsg, setRestoreMsg]       = useState('')
+  const [restoring, setRestoring]         = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function handleExport() {
+    downloadBackup(data.exportData())
+  }
+
+  async function handleRestoreFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      setRestoring(true)
+      try {
+        const parsed = parseBackup(ev.target?.result as string)
+        const counts = await data.importAll(parsed)
+        setRestoreStatus('ok')
+        setRestoreMsg(
+          `✅ Restaurado: ${counts.exams} prova(s), ${counts.questions} questão(ões), ${counts.flashcards} flashcard(s).`
+        )
+      } catch (err) {
+        setRestoreStatus('err')
+        setRestoreMsg(`❌ Erro ao restaurar: ${String(err)}`)
+      } finally {
+        setRestoring(false)
+        if (fileRef.current) fileRef.current.value = ''
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="card mb-2" style={{ borderLeft: '4px solid var(--brand)' }}>
+      <p style={{ fontWeight: 600, marginBottom: '.25rem' }}>📦 Backup entre dispositivos</p>
+      <p className="muted mb-2" style={{ fontSize: '.87rem' }}>
+        Exporte todos os dados como arquivo JSON para transferir para outro dispositivo ou guardar como cópia de segurança.
+      </p>
+      <div className="gap-sm" style={{ flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={handleExport} disabled={data.loading}>
+          ⬇️ Exportar backup
+        </button>
+        <label style={{ cursor: restoring ? 'wait' : 'pointer' }}>
+          <span className={`btn btn-ghost${restoring ? ' disabled' : ''}`}>
+            {restoring ? 'Restaurando…' : '⬆️ Restaurar backup'}
+          </span>
+          <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleRestoreFile} />
+        </label>
+      </div>
+      {restoreStatus !== 'idle' && (
+        <div className={`feedback ${restoreStatus === 'ok' ? 'correct' : 'wrong'}`} style={{ marginTop: '.75rem' }}>
+          {restoreMsg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Prompt card ───────────────────────────────────────────────────────────────
 function PromptCard() {
+  const { exams } = useData()
   const [tab, setTab]           = useState<'new' | 'continue'>('new')
   const [copiedNew, setCopiedNew]       = useState(false)
   const [copiedCont, setCopiedCont]     = useState(false)
@@ -229,8 +285,7 @@ function PromptCard() {
   const [expandedCont, setExpandedCont] = useState(false)
   const [selectedExamId, setSelectedExamId] = useState('')
 
-  const exams = getExams()
-  const selectedExam = exams.find((e) => e.id === selectedExamId) ?? null
+  const selectedExam       = exams.find((e) => e.id === selectedExamId) ?? null
   const continuationPrompt = selectedExam ? buildContinuationPrompt(selectedExam) : ''
 
   function copy(text: string, setter: (v: boolean) => void) {
@@ -250,7 +305,6 @@ function PromptCard() {
     <div className="card mt-2">
       <p style={{ fontWeight: 600, marginBottom: '.75rem' }}>📋 Prompts para o ChatGPT</p>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', marginBottom: '1rem', gap: '.25rem' }}>
         {(['new', 'continue'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
@@ -285,7 +339,7 @@ function PromptCard() {
       {tab === 'continue' && (
         <>
           <p className="muted mb-2" style={{ fontSize: '.87rem' }}>
-            Use este prompt para enviar o <strong>restante da prova</strong> em partes. As questões serão adicionadas à prova já importada, sem apagar as anteriores.
+            Use este prompt para enviar o <strong>restante da prova</strong> em partes.
           </p>
 
           {exams.length === 0 ? (
@@ -342,116 +396,31 @@ function PromptCard() {
   )
 }
 
-// ── Backup / Restaurar dados ──────────────────────────────────────────────────
-function BackupCard() {
-  const [restoreStatus, setRestoreStatus] = useState<'idle' | 'ok' | 'err'>('idle')
-  const [restoreMsg, setRestoreMsg]       = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  function handleExport() {
-    const data = exportBackup()
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
-    a.href     = url
-    a.download = `backup-sedsc-${date}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function handleRestoreFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string) as BackupData
-        if (data.version !== 1 || !Array.isArray(data.exams)) {
-          throw new Error('Arquivo de backup inválido.')
-        }
-        const counts = importBackup(data)
-        setRestoreStatus('ok')
-        setRestoreMsg(
-          `✅ Restaurado com sucesso: ${counts.exams} prova(s), ${counts.questions} questão(ões), ` +
-          `${counts.flashcards} flashcard(s). Recarregue a página para ver tudo.`
-        )
-      } catch (err) {
-        setRestoreStatus('err')
-        setRestoreMsg(`❌ Erro ao restaurar: ${String(err)}`)
-      }
-      if (fileRef.current) fileRef.current.value = ''
-    }
-    reader.readAsText(file)
-  }
-
-  return (
-    <div className="card mb-2" style={{ borderLeft: '4px solid var(--brand)' }}>
-      <p style={{ fontWeight: 600, marginBottom: '.25rem' }}>📦 Backup — usar em outro dispositivo</p>
-      <p className="muted mb-2" style={{ fontSize: '.87rem' }}>
-        As questões ficam salvas <strong>só neste navegador</strong>. Para acessar em outro computador ou celular, exporte o backup aqui e importe lá.
-      </p>
-
-      <div className="gap-sm" style={{ flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={handleExport}>
-          ⬇️ Exportar backup
-        </button>
-        <label style={{ cursor: 'pointer' }}>
-          <span className="btn btn-ghost">
-            ⬆️ Restaurar backup
-          </span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json"
-            style={{ display: 'none' }}
-            onChange={handleRestoreFile}
-          />
-        </label>
-      </div>
-
-      {restoreStatus !== 'idle' && (
-        <div className={`feedback ${restoreStatus === 'ok' ? 'correct' : 'wrong'}`} style={{ marginTop: '.75rem' }}>
-          {restoreMsg}
-          {restoreStatus === 'ok' && (
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ marginLeft: '1rem' }}
-              onClick={() => window.location.reload()}
-            >
-              Recarregar agora
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Gerenciador de mídia ──────────────────────────────────────────────────────
 function MediaManager() {
-  const allQuestions = getQuestions()
-  const mediaQuestions = allQuestions.filter((q) => q.has_media)
+  const { questions, exams, saveMedia, deleteMedia } = useData()
+  const mediaQuestions = questions.filter((q) => q.has_media)
 
-  const [mediaIds, setMediaIds] = useState<Set<string>>(new Set())
-  const [previews, setPreviews] = useState<Record<string, string>>({})
+  const [previews, setPreviews]   = useState<Record<string, boolean>>({})
   const [uploading, setUploading] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'missing' | 'done'>('all')
+  const [filter, setFilter]       = useState<'all' | 'missing' | 'done'>('all')
 
-  const loadMediaIds = useCallback(async () => {
-    const ids = await listMediaIds()
-    setMediaIds(ids)
-  }, [])
+  if (mediaQuestions.length === 0) return null
 
-  useEffect(() => { loadMediaIds() }, [loadMediaIds])
+  const examMap    = new Map(exams.map((e) => [e.id, e.title]))
+  const doneCount  = mediaQuestions.filter((q) => !!q.media_url).length
+  const missingCount = mediaQuestions.length - doneCount
+
+  const filtered = mediaQuestions.filter((q) => {
+    if (filter === 'missing') return !q.media_url
+    if (filter === 'done')    return !!q.media_url
+    return true
+  })
 
   async function handleUpload(q: Question, file: File) {
     setUploading(q.id)
     try {
       await saveMedia(q.id, file)
-      const url = await getMediaObjectUrl(q.id)
-      if (url) setPreviews((p) => ({ ...p, [q.id]: url }))
-      setMediaIds((ids) => new Set([...ids, q.id]))
     } finally {
       setUploading(null)
     }
@@ -459,36 +428,14 @@ function MediaManager() {
 
   async function handleDelete(questionId: string) {
     await deleteMedia(questionId)
-    setPreviews((p) => { const n = { ...p }; delete n[questionId]; return n })
-    setMediaIds((ids) => { const n = new Set(ids); n.delete(questionId); return n })
   }
-
-  async function handlePreview(q: Question) {
-    if (previews[q.id]) return
-    const url = await getMediaObjectUrl(q.id)
-    if (url) setPreviews((p) => ({ ...p, [q.id]: url }))
-  }
-
-  if (mediaQuestions.length === 0) return null
-
-  const exams = getExams()
-  const examMap = new Map(exams.map((e) => [e.id, e.title]))
-
-  const filtered = mediaQuestions.filter((q) => {
-    if (filter === 'missing') return !mediaIds.has(q.id) && !q.media_url
-    if (filter === 'done')    return mediaIds.has(q.id) || !!q.media_url
-    return true
-  })
-
-  const doneCount    = mediaQuestions.filter((q) => mediaIds.has(q.id) || !!q.media_url).length
-  const missingCount = mediaQuestions.length - doneCount
 
   return (
     <div className="card mt-3">
       <h2 className="section-title">🖼️ Questões com Mídia</h2>
       <p className="muted mb-2" style={{ fontSize: '.88rem' }}>
         {mediaQuestions.length} questão{mediaQuestions.length > 1 ? 'ões' : ''} referem a imagem, tabela ou gráfico.
-        Faça o upload da imagem (screenshot ou recorte do PDF) para cada uma.
+        Faça o upload da imagem (screenshot ou recorte do PDF) para cada uma — fica salvo na nuvem.
       </p>
 
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -514,10 +461,8 @@ function MediaManager() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
         {filtered.map((q) => {
-          const hasUpload = mediaIds.has(q.id)
-          const hasUrl    = !!q.media_url
-          const hasMidia  = hasUpload || hasUrl
-          const preview   = previews[q.id] ?? (hasUrl ? q.media_url : null)
+          const hasMidia  = !!q.media_url
+          const showImg   = previews[q.id] && !!q.media_url
 
           return (
             <div
@@ -546,16 +491,14 @@ function MediaManager() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem', alignItems: 'flex-end', flexShrink: 0 }}>
-                  <label
-                    style={{
-                      cursor: uploading === q.id ? 'wait' : 'pointer',
-                      background: 'var(--brand)', color: '#fff',
-                      padding: '.3rem .75rem', borderRadius: 'var(--radius)',
-                      fontSize: '.82rem', fontWeight: 600, whiteSpace: 'nowrap',
-                      opacity: uploading === q.id ? .6 : 1,
-                    }}
-                  >
-                    {uploading === q.id ? 'Salvando…' : hasMidia ? '🔄 Trocar imagem' : '📁 Upload imagem'}
+                  <label style={{
+                    cursor: uploading === q.id ? 'wait' : 'pointer',
+                    background: 'var(--brand)', color: '#fff',
+                    padding: '.3rem .75rem', borderRadius: 'var(--radius)',
+                    fontSize: '.82rem', fontWeight: 600, whiteSpace: 'nowrap',
+                    opacity: uploading === q.id ? .6 : 1,
+                  }}>
+                    {uploading === q.id ? 'Enviando…' : hasMidia ? '🔄 Trocar' : '📁 Upload'}
                     <input
                       type="file"
                       accept="image/*"
@@ -568,27 +511,31 @@ function MediaManager() {
                       }}
                     />
                   </label>
-                  {hasUpload && (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '.78rem', color: 'var(--danger)' }}
-                      onClick={() => handleDelete(q.id)}
-                    >
-                      Remover
-                    </button>
-                  )}
-                  {hasMidia && !preview && (
-                    <button className="btn btn-ghost btn-sm" style={{ fontSize: '.78rem' }} onClick={() => handlePreview(q)}>
-                      Ver imagem
-                    </button>
+                  {hasMidia && (
+                    <>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '.78rem' }}
+                        onClick={() => setPreviews((p) => ({ ...p, [q.id]: !p[q.id] }))}
+                      >
+                        {showImg ? 'Ocultar' : 'Ver imagem'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '.78rem', color: 'var(--danger)' }}
+                        onClick={() => handleDelete(q.id)}
+                      >
+                        Remover
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
 
-              {preview && (
+              {showImg && q.media_url && (
                 <div style={{ marginTop: '.75rem' }}>
                   <img
-                    src={preview}
+                    src={q.media_url}
                     alt="Mídia da questão"
                     style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'block' }}
                   />
@@ -602,11 +549,16 @@ function MediaManager() {
   )
 }
 
+// ── Página principal ──────────────────────────────────────────────────────────
 export default function ImportPage() {
-  const [text, setText] = useState('')
+  const { exams, saveExam, saveQuestions, loading } = useData()
+  const { signOut, user } = useAuth()
+
+  const [text, setText]       = useState('')
   const [preview, setPreview] = useState<PreviewState | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
   const [success, setSuccess] = useState('')
+  const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -623,24 +575,19 @@ export default function ImportPage() {
     setPreview(null)
 
     const cleaned = cleanJson(text)
-
-    // atualiza o textarea com o texto limpo para facilitar inspeção visual
     if (cleaned !== text) setText(cleaned)
 
     let parsed: unknown
     try {
       parsed = JSON.parse(cleaned)
     } catch (originalErr) {
-      // Tenta reparar com jsonrepair (vírgulas faltando, chaves, etc.)
       let repaired = false
       try {
         const fixed = jsonrepair(cleaned)
         parsed = JSON.parse(fixed)
         setText(fixed)
         repaired = true
-      } catch {
-        // jsonrepair não conseguiu
-      }
+      } catch { /* noop */ }
 
       if (!repaired) {
         const snippet = getErrorSnippet(cleaned, originalErr)
@@ -656,51 +603,61 @@ export default function ImportPage() {
     }
 
     const raw = parsed as ImportPayload
-    if (!raw || typeof raw !== 'object') {
-      setError('O JSON deve ser um objeto, não uma lista ou valor simples.')
-      return
-    }
-    if (!raw.exam || typeof raw.exam !== 'object') {
-      setError('Faltando o campo "exam" no JSON.')
-      return
-    }
-    if (!Array.isArray(raw.questions) || raw.questions.length === 0) {
-      setError('Faltando o campo "questions" (ou está vazio) no JSON.')
-      return
-    }
+    if (!raw || typeof raw !== 'object') { setError('O JSON deve ser um objeto.'); return }
+    if (!raw.exam || typeof raw.exam !== 'object') { setError('Faltando o campo "exam" no JSON.'); return }
+    if (!Array.isArray(raw.questions) || raw.questions.length === 0) { setError('Faltando o campo "questions" (ou está vazio).'); return }
 
     try {
       const { exam, questions } = parsePayload(raw)
-      const existing = getExams()
-      const duplicate = existing.some((e) => e.id === exam.id)
+      const duplicate = exams.some((e) => e.id === exam.id)
       setPreview({ exam, questions, duplicate })
     } catch (err) {
       setError(`Erro ao processar os dados: ${String(err)}`)
     }
   }
 
-  function handleImport() {
+  async function handleImport() {
     if (!preview) return
-    saveExam(preview.exam)
-    saveQuestions(preview.questions)
-    setSuccess(`✅ Prova importada com sucesso! ${preview.questions.length} questões salvas.`)
-    setPreview(null)
-    setText('')
-    if (fileRef.current) fileRef.current.value = ''
+    setImporting(true)
+    try {
+      await saveExam(preview.exam)
+      await saveQuestions(preview.questions)
+      setSuccess(`✅ Prova importada com sucesso! ${preview.questions.length} questões salvas.`)
+      setPreview(null)
+      setText('')
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (err) {
+      setError(`Erro ao salvar: ${String(err)}`)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div>
+        <h1 className="page-title">Importar Questões</h1>
+        <div className="card text-center"><p className="muted">Carregando dados…</p></div>
+      </div>
+    )
   }
 
   return (
     <div>
-      <h1 className="page-title">Importar Questões</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem' }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Importar Questões</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
+          <span className="muted" style={{ fontSize: '.82rem' }}>{user?.email}</span>
+          <button className="btn btn-ghost btn-sm" onClick={signOut}>Sair</button>
+        </div>
+      </div>
 
       <BackupCard />
 
       <div className="card mb-2">
         <label>Selecionar arquivo JSON</label>
         <input ref={fileRef} type="file" accept=".json" onChange={handleFileChange} />
-        <p className="muted mt-1">
-          Ou cole o conteúdo do JSON diretamente abaixo.
-        </p>
+        <p className="muted mt-1">Ou cole o conteúdo do JSON diretamente abaixo.</p>
       </div>
 
       <div className="card mb-2">
@@ -717,27 +674,15 @@ export default function ImportPage() {
             Validar JSON
           </button>
           {text && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => { setText(''); setPreview(null); setError(''); setSuccess('') }}
-            >
+            <button className="btn btn-ghost btn-sm" onClick={() => { setText(''); setPreview(null); setError(''); setSuccess('') }}>
               Limpar
             </button>
           )}
         </div>
       </div>
 
-      {error && (
-        <div className="feedback wrong" style={{ whiteSpace: 'pre-wrap' }}>
-          ❌ {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="feedback correct">
-          {success}
-        </div>
-      )}
+      {error && <div className="feedback wrong" style={{ whiteSpace: 'pre-wrap' }}>❌ {error}</div>}
+      {success && <div className="feedback correct">{success}</div>}
 
       {preview && (
         <div className="card">
@@ -764,15 +709,15 @@ export default function ImportPage() {
 
           {preview.duplicate && (
             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius)', padding: '.65rem .85rem', marginBottom: '.75rem', fontSize: '.88rem' }}>
-              ℹ️ Esta prova já existe. As novas questões serão <strong>adicionadas</strong> às existentes. Questões com o mesmo número serão atualizadas.
+              ℹ️ Esta prova já existe. As novas questões serão <strong>adicionadas</strong> às existentes.
             </div>
           )}
 
           <div className="gap-sm">
-            <button className="btn btn-success" onClick={handleImport}>
-              {preview.duplicate ? 'Mesclar e Importar' : 'Confirmar Importação'}
+            <button className="btn btn-success" onClick={handleImport} disabled={importing}>
+              {importing ? 'Salvando…' : preview.duplicate ? 'Mesclar e Importar' : 'Confirmar Importação'}
             </button>
-            <button className="btn btn-ghost" onClick={() => setPreview(null)}>
+            <button className="btn btn-ghost" onClick={() => setPreview(null)} disabled={importing}>
               Cancelar
             </button>
           </div>
@@ -787,15 +732,12 @@ export default function ImportPage() {
           <li>Cole no ChatGPT junto com o PDF ou texto da prova.</li>
           <li>Cole o JSON gerado aqui e clique em "Validar JSON" → "Confirmar Importação".</li>
         </ol>
-        <p style={{ fontWeight: 600, fontSize: '.88rem', marginBottom: '.35rem' }}>Prova grande em partes (tokens insuficientes):</p>
+        <p style={{ fontWeight: 600, fontSize: '.88rem', marginBottom: '.35rem' }}>Prova grande em partes:</p>
         <ol style={{ paddingLeft: '1.2rem', lineHeight: '1.8', fontSize: '.9rem', color: 'var(--muted)' }}>
           <li>Envie a 1ª parte com o prompt <strong>"Prova nova"</strong> e importe o JSON.</li>
-          <li>Para as partes seguintes, use o prompt <strong>"Continuar prova"</strong> — selecione a prova já importada.</li>
-          <li>Importe cada parte normalmente: as questões são <strong>adicionadas</strong>, não apagam as anteriores.</li>
+          <li>Para as partes seguintes, use o prompt <strong>"Continuar prova"</strong>.</li>
+          <li>Importe cada parte normalmente: as questões são <strong>adicionadas</strong>.</li>
         </ol>
-        <p className="muted mt-2">
-          Arquivo de exemplo: <code>public/sample-exam.json</code>
-        </p>
       </div>
 
       <PromptCard />

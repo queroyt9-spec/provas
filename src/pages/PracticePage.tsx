@@ -1,20 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import type { Question, Attempt } from '../types'
-import { getMediaObjectUrl } from '../utils/mediaStorage'
-import {
-  getExams,
-  getQuestions,
-  getAttempts,
-  saveAttempt,
-  saveFlashcard,
-  getFlashcards,
-} from '../utils/storage'
+import { useData } from '../contexts/DataContext'
 import { createFlashcardFromQuestion } from '../utils/flashcardUtils'
 
 type Filter = { examId: string; area: string }
-
-// Para múltipla escolha: selected = letra marcada
-// Para discursiva: selected = texto digitado; submitted só vira true após autoavaliação
 type AnswerState = { selected: string; submitted: boolean; showModel?: boolean }
 
 function isDiscursive(q: Question) {
@@ -22,9 +11,7 @@ function isDiscursive(q: Question) {
 }
 
 function buildMCPrompt(q: Question, selected: string, isCorrect: boolean): string {
-  const alts = Object.entries(q.alternatives)
-    .map(([l, t]) => `${l}) ${t}`)
-    .join('\n')
+  const alts = Object.entries(q.alternatives).map(([l, t]) => `${l}) ${t}`).join('\n')
   const resultLine = isCorrect
     ? `Minha resposta: ${selected} ✅ (acertei)`
     : `Minha resposta: ${selected} ❌ (errei)\nGabarito: ${q.correct_answer}`
@@ -50,9 +37,7 @@ Quero:
 }
 
 function buildDiscursivePrompt(q: Question, written: string, isCorrect: boolean): string {
-  const resultLine = isCorrect
-    ? 'Autoavaliação: me considerei correto(a).'
-    : 'Autoavaliação: errei ou fui parcial.'
+  const resultLine = isCorrect ? 'Autoavaliação: me considerei correto(a).' : 'Autoavaliação: errei ou fui parcial.'
   return `Explique esta questão discursiva de forma simples, sem termos difíceis, como se estivesse explicando para alguém que está estudando pela primeira vez.
 
 Contexto: Concurso SED/SC para Professor/Pedagogia — banca FURB.
@@ -77,14 +62,12 @@ Quero:
    Verso: (resposta simples, máximo 2 linhas)`
 }
 
-// ── Progress summary por prova ───────────────────────────────────────────────
+// ── Progresso por prova ───────────────────────────────────────────────────────
 function ExamProgress() {
-  const exams = getExams()
-  const questions = getQuestions()
-  const attempts = getAttempts()
+  const { exams, questions, attempts } = useData()
   if (exams.length === 0) return null
 
-  const attempted = new Set(attempts.map((a) => a.question_id))
+  const attempted  = new Set(attempts.map((a) => a.question_id))
   const lastResult = new Map<string, boolean>()
   for (const a of attempts) lastResult.set(a.question_id, a.is_correct)
 
@@ -93,8 +76,8 @@ function ExamProgress() {
       <p style={{ fontWeight: 600, marginBottom: '.75rem' }}>Progresso por prova</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
         {exams.map((exam) => {
-          const qs = questions.filter((q) => q.exam_id === exam.id)
-          const total = qs.length
+          const qs      = questions.filter((q) => q.exam_id === exam.id)
+          const total   = qs.length
           if (total === 0) return null
           const seen    = qs.filter((q) => attempted.has(q.id)).length
           const correct = qs.filter((q) => lastResult.get(q.id) === true).length
@@ -127,12 +110,13 @@ function ExamProgress() {
   )
 }
 
-// ── Histórico rápido da questão atual ────────────────────────────────────────
+// ── Histórico rápido ──────────────────────────────────────────────────────────
 function QuestionHistory({ questionId }: { questionId: string }) {
-  const attempts = getAttempts().filter((a) => a.question_id === questionId)
-  if (attempts.length === 0) return null
-  const last = attempts[attempts.length - 1]
-  const times = attempts.length
+  const { attempts } = useData()
+  const mine = attempts.filter((a) => a.question_id === questionId)
+  if (mine.length === 0) return null
+  const last  = mine[mine.length - 1]
+  const times = mine.length
   return (
     <span
       style={{
@@ -148,20 +132,51 @@ function QuestionHistory({ questionId }: { questionId: string }) {
   )
 }
 
-// ── Questão de múltipla escolha ──────────────────────────────────────────────
+// ── Imagem/mídia da questão ───────────────────────────────────────────────────
+function QuestionMedia({ question }: { question: Question }) {
+  if (!question.media_url) return null
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <img
+        src={question.media_url}
+        alt="Imagem da questão"
+        style={{
+          maxWidth: '100%', maxHeight: 400,
+          borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'block',
+        }}
+      />
+    </div>
+  )
+}
+
+// ── Aviso de mídia ausente ────────────────────────────────────────────────────
+function MediaMissingBanner({ onSkip }: { onSkip: () => void }) {
+  return (
+    <div style={{
+      background: '#fffbeb', border: '1px solid #fde68a',
+      borderRadius: 'var(--radius)', padding: '.65rem .9rem',
+      marginBottom: '.85rem', fontSize: '.88rem',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: '.75rem', flexWrap: 'wrap',
+    }}>
+      <span>
+        ⚠️ <strong>Esta questão exige uma imagem/tabela/gráfico.</strong>{' '}
+        Adicione a imagem na aba <strong>Importar → Questões com Mídia</strong> ou pule.
+      </span>
+      <button className="btn btn-warning btn-sm" onClick={onSkip}>Pular →</button>
+    </div>
+  )
+}
+
+// ── Múltipla escolha ─────────────────────────────────────────────────────────
 function MultipleChoice({
   question, answer, onSelect, onSubmit, onNext, onCopyPrompt, copied,
 }: {
-  question: Question
-  answer: AnswerState | null
-  onSelect: (l: string) => void
-  onSubmit: () => void
-  onNext: () => void
-  onCopyPrompt: () => void
-  copied: boolean
+  question: Question; answer: AnswerState | null
+  onSelect(l: string): void; onSubmit(): void; onNext(): void
+  onCopyPrompt(): void; copied: boolean
 }) {
   const submitted = !!answer?.submitted
-
   return (
     <>
       {Object.entries(question.alternatives).map(([letter, text]) => {
@@ -169,9 +184,7 @@ function MultipleChoice({
         if (submitted) {
           if (letter === question.correct_answer) cls += ' correct'
           else if (letter === answer?.selected) cls += ' wrong'
-        } else if (answer?.selected === letter) {
-          cls += ' selected'
-        }
+        } else if (answer?.selected === letter) cls += ' selected'
         return (
           <button key={letter} className={cls} onClick={() => onSelect(letter)} disabled={submitted}>
             <span className="letter">{letter}</span>
@@ -179,13 +192,11 @@ function MultipleChoice({
           </button>
         )
       })}
-
       {!submitted && (
         <button className="btn btn-primary mt-2" onClick={onSubmit} disabled={!answer?.selected}>
           Confirmar resposta
         </button>
       )}
-
       {submitted && (
         <>
           <div className={`feedback ${answer?.selected === question.correct_answer ? 'correct' : 'wrong'}`}>
@@ -210,58 +221,31 @@ function MultipleChoice({
   )
 }
 
-// ── Questão discursiva ───────────────────────────────────────────────────────
+// ── Discursiva ───────────────────────────────────────────────────────────────
 function Discursive({
   question, answer, onTextChange, onShowModel, onSelfEval, onNext, onCopyPrompt, copied,
 }: {
-  question: Question
-  answer: AnswerState | null
-  onTextChange: (t: string) => void
-  onShowModel: () => void
-  onSelfEval: (correct: boolean) => void
-  onNext: () => void
-  onCopyPrompt: () => void
-  copied: boolean
+  question: Question; answer: AnswerState | null
+  onTextChange(t: string): void; onShowModel(): void; onSelfEval(correct: boolean): void
+  onNext(): void; onCopyPrompt(): void; copied: boolean
 }) {
   const showModel = !!answer?.showModel
   const submitted = !!answer?.submitted
-
   return (
     <>
-      {/* Campo de resposta */}
       <div style={{ marginBottom: '.75rem' }}>
-        <label style={{ color: 'var(--muted)', fontSize: '.83rem', marginBottom: '.35rem' }}>
-          Sua resposta
-        </label>
+        <label style={{ color: 'var(--muted)', fontSize: '.83rem', marginBottom: '.35rem' }}>Sua resposta</label>
         <textarea
-          rows={6}
-          value={answer?.selected ?? ''}
-          onChange={(e) => onTextChange(e.target.value)}
-          disabled={showModel}
-          placeholder="Escreva sua resposta aqui antes de ver o gabarito..."
+          rows={6} value={answer?.selected ?? ''} onChange={(e) => onTextChange(e.target.value)}
+          disabled={showModel} placeholder="Escreva sua resposta aqui antes de ver o gabarito…"
           style={{ resize: 'vertical' }}
         />
       </div>
-
-      {/* Botão ver gabarito */}
-      {!showModel && (
-        <button className="btn btn-primary" onClick={onShowModel}>
-          Ver gabarito
-        </button>
-      )}
-
-      {/* Gabarito + autoavaliação */}
+      {!showModel && <button className="btn btn-primary" onClick={onShowModel}>Ver gabarito</button>}
       {showModel && (
         <>
-          <div style={{
-            background: '#f0fdf4', border: '1px solid #bbf7d0',
-            borderRadius: 'var(--radius)', padding: '.85rem 1rem',
-            marginBottom: '.75rem', fontSize: '.93rem', lineHeight: '1.65',
-            whiteSpace: 'pre-wrap',
-          }}>
-            <p style={{ fontWeight: 600, marginBottom: '.4rem', color: 'var(--success)' }}>
-              📝 Resposta modelo
-            </p>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius)', padding: '.85rem 1rem', marginBottom: '.75rem', fontSize: '.93rem', lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>
+            <p style={{ fontWeight: 600, marginBottom: '.4rem', color: 'var(--success)' }}>📝 Resposta modelo</p>
             {question.correct_answer}
             {question.explanation && (
               <p style={{ marginTop: '.6rem', borderTop: '1px solid #bbf7d0', paddingTop: '.6rem', color: 'var(--muted)', fontSize: '.88rem' }}>
@@ -269,12 +253,9 @@ function Discursive({
               </p>
             )}
           </div>
-
           {!submitted ? (
             <>
-              <p style={{ fontSize: '.88rem', color: 'var(--muted)', marginBottom: '.5rem' }}>
-                Como você se saiu comparando com o gabarito?
-              </p>
+              <p style={{ fontSize: '.88rem', color: 'var(--muted)', marginBottom: '.5rem' }}>Como você se saiu comparando com o gabarito?</p>
               <div className="gap-sm">
                 <button className="btn btn-success" onClick={() => onSelfEval(true)}>✅ Acertei</button>
                 <button className="btn btn-warning" onClick={() => onSelfEval(false)}>🟡 Parcial / Errei</button>
@@ -294,95 +275,9 @@ function Discursive({
   )
 }
 
-// ── Aviso de mídia ausente (só mostra se não houver imagem no IndexedDB) ─────
-function MediaMissingBanner({ questionId, onSkip }: { questionId: string; onSkip: () => void }) {
-  const [hasStored, setHasStored] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getMediaObjectUrl(questionId).then((url) => {
-      if (cancelled) { if (url) URL.revokeObjectURL(url); return }
-      setHasStored(!!url)
-      if (url) URL.revokeObjectURL(url)
-    })
-    return () => { cancelled = true }
-  }, [questionId])
-
-  // While loading or if image is found, don't show the warning
-  if (hasStored === null || hasStored) return null
-
-  return (
-    <div style={{
-      background: '#fffbeb', border: '1px solid #fde68a',
-      borderRadius: 'var(--radius)', padding: '.65rem .9rem',
-      marginBottom: '.85rem', fontSize: '.88rem',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap: '.75rem', flexWrap: 'wrap',
-    }}>
-      <span>
-        ⚠️ <strong>Esta questão exige uma imagem/tabela/gráfico.</strong>{' '}
-        Adicione a imagem na aba <strong>Importar → Questões com Mídia</strong> ou pule.
-      </span>
-      <button className="btn btn-warning btn-sm" onClick={onSkip}>
-        Pular questão →
-      </button>
-    </div>
-  )
-}
-
-// ── Mídia da questão (imagem/tabela/gráfico) ─────────────────────────────────
-function QuestionMedia({ question }: { question: Question }) {
-  const [url, setUrl] = useState<string | null>(question.media_url ?? null)
-  const prevUrlRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    // Revoke previous object URL to avoid memory leaks
-    if (prevUrlRef.current && prevUrlRef.current !== question.media_url) {
-      URL.revokeObjectURL(prevUrlRef.current)
-      prevUrlRef.current = null
-    }
-
-    if (question.media_url) {
-      setUrl(question.media_url)
-      return
-    }
-
-    let cancelled = false
-    getMediaObjectUrl(question.id).then((objectUrl) => {
-      if (cancelled) {
-        if (objectUrl) URL.revokeObjectURL(objectUrl)
-        return
-      }
-      prevUrlRef.current = objectUrl
-      setUrl(objectUrl)
-    })
-
-    return () => { cancelled = true }
-  }, [question.id, question.media_url])
-
-  if (!url) return null
-
-  return (
-    <div style={{ marginBottom: '1rem' }}>
-      <img
-        src={url}
-        alt="Imagem da questão"
-        style={{
-          maxWidth: '100%',
-          maxHeight: 400,
-          borderRadius: 'var(--radius)',
-          border: '1px solid var(--border)',
-          display: 'block',
-        }}
-      />
-    </div>
-  )
-}
-
-// ── Página principal ─────────────────────────────────────────────────────────
+// ── Página principal ──────────────────────────────────────────────────────────
 export default function PracticePage() {
-  const exams = getExams()
-  const allQuestions = getQuestions()
+  const { exams, questions: allQuestions, flashcards, saveAttempt, saveFlashcard, loading } = useData()
 
   const [filter, setFilter]   = useState<Filter>({ examId: '', area: '' })
   const [index, setIndex]     = useState(0)
@@ -392,9 +287,7 @@ export default function PracticePage() {
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
 
   const areas = useMemo(() => {
-    const base = filter.examId
-      ? allQuestions.filter((q) => q.exam_id === filter.examId)
-      : allQuestions
+    const base = filter.examId ? allQuestions.filter((q) => q.exam_id === filter.examId) : allQuestions
     return [...new Set(base.map((q) => q.area).filter(Boolean))]
   }, [allQuestions, filter.examId])
 
@@ -408,14 +301,32 @@ export default function PracticePage() {
   const current: Question | undefined = questions[index]
   const discursive = current ? isDiscursive(current) : false
 
-  function handleFilterChange(key: keyof Filter, value: string) {
-    setFilter((f) => ({ ...f, [key]: value, ...(key === 'examId' ? { area: '' } : {}) }))
-    setIndex(0)
-    setAnswer(null)
-    setLastCorrect(null)
+  if (loading) {
+    return (
+      <div>
+        <h1 className="page-title">Praticar Questões</h1>
+        <div className="card text-center"><p className="muted">Carregando dados…</p></div>
+      </div>
+    )
   }
 
-  // ── Múltipla escolha ──
+  if (exams.length === 0) {
+    return (
+      <div>
+        <h1 className="page-title">Praticar Questões</h1>
+        <div className="card text-center">
+          <p className="muted">Nenhuma prova importada ainda.</p>
+          <p className="muted mt-1">Vá para a aba <strong>Importar</strong> para adicionar questões.</p>
+        </div>
+      </div>
+    )
+  }
+
+  function handleFilterChange(key: keyof Filter, value: string) {
+    setFilter((f) => ({ ...f, [key]: value, ...(key === 'examId' ? { area: '' } : {}) }))
+    setIndex(0); setAnswer(null); setLastCorrect(null)
+  }
+
   function handleSelect(letter: string) {
     if (answer?.submitted) return
     setAnswer({ selected: letter, submitted: false })
@@ -431,7 +342,6 @@ export default function PracticePage() {
     setTick((t) => t + 1)
   }
 
-  // ── Discursiva ──
   function handleTextChange(text: string) {
     setAnswer({ selected: text, submitted: false })
   }
@@ -444,7 +354,7 @@ export default function PracticePage() {
     if (!current || !answer) return
     recordAttempt(current, answer.selected, correct)
     if (!correct) {
-      const existing = getFlashcards().find((c) => c.question_id === current.id)
+      const existing = flashcards.find((c) => c.question_id === current.id)
       if (!existing) saveFlashcard(createFlashcardFromQuestion(current))
     }
     setLastCorrect(correct)
@@ -462,16 +372,13 @@ export default function PracticePage() {
     }
     saveAttempt(attempt)
     if (!isCorrect) {
-      const existing = getFlashcards().find((c) => c.question_id === q.id)
+      const existing = flashcards.find((c) => c.question_id === q.id)
       if (!existing) saveFlashcard(createFlashcardFromQuestion(q))
     }
   }
 
   function handleNext() {
-    setIndex((i) => i + 1)
-    setAnswer(null)
-    setCopied(false)
-    setLastCorrect(null)
+    setIndex((i) => i + 1); setAnswer(null); setCopied(false); setLastCorrect(null)
   }
 
   function handleCopyPrompt() {
@@ -484,34 +391,19 @@ export default function PracticePage() {
     setCopied(true)
   }
 
-  if (exams.length === 0) {
-    return (
-      <div>
-        <h1 className="page-title">Praticar Questões</h1>
-        <div className="card text-center">
-          <p className="muted">Nenhuma prova importada ainda.</p>
-          <p className="muted mt-1">Vá para a aba <strong>Importar</strong> para adicionar questões.</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div>
       <h1 className="page-title">Praticar Questões</h1>
 
       <div key={tick}><ExamProgress /></div>
 
-      {/* Filtros */}
       <div className="card mb-2">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
           <div>
             <label>Prova</label>
             <select value={filter.examId} onChange={(e) => handleFilterChange('examId', e.target.value)}>
               <option value="">Todas as provas</option>
-              {exams.map((e) => (
-                <option key={e.id} value={e.id}>{e.title} ({e.year})</option>
-              ))}
+              {exams.map((e) => <option key={e.id} value={e.id}>{e.title} ({e.year})</option>)}
             </select>
           </div>
           <div>
@@ -525,9 +417,7 @@ export default function PracticePage() {
       </div>
 
       {questions.length === 0 ? (
-        <div className="card text-center">
-          <p className="muted">Nenhuma questão para os filtros selecionados.</p>
-        </div>
+        <div className="card text-center"><p className="muted">Nenhuma questão para os filtros selecionados.</p></div>
       ) : index >= questions.length ? (
         <div className="card text-center">
           <p style={{ fontSize: '1.5rem', marginBottom: '.5rem' }}>🎉</p>
@@ -538,31 +428,20 @@ export default function PracticePage() {
         </div>
       ) : (
         <div className="card">
-          {/* Cabeçalho */}
           <div className="gap-sm mb-2" style={{ alignItems: 'center' }}>
             <span className="counter">Questão {index + 1} de {questions.length}</span>
-            {discursive && (
-              <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>
-            )}
-            {current.area && <span className="badge">{current.area}</span>}
-            {current.topic && (
-              <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
-                {current.topic}
-              </span>
-            )}
+            {discursive && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>}
+            {current.area  && <span className="badge">{current.area}</span>}
+            {current.topic && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>{current.topic}</span>}
             <QuestionHistory questionId={current.id} />
           </div>
 
-          {/* Barra de progresso da sessão */}
           <div className="progress-bar-wrap mb-2">
             <div className="progress-bar" style={{ width: `${(index / questions.length) * 100}%` }} />
           </div>
 
           {current.has_media && <QuestionMedia question={current} />}
-
-          {current.has_media && !current.media_url && (
-            <MediaMissingBanner questionId={current.id} onSkip={handleNext} />
-          )}
+          {current.has_media && !current.media_url && <MediaMissingBanner onSkip={handleNext} />}
 
           <p style={{ lineHeight: '1.65', marginBottom: '1rem', fontSize: '.97rem', whiteSpace: 'pre-wrap' }}>
             {current.statement}
@@ -570,35 +449,24 @@ export default function PracticePage() {
 
           <hr className="divider" />
 
-          {/* Feedback geral (discursiva após autoavaliação) */}
           {discursive && answer?.submitted && lastCorrect !== null && (
             <div className={`feedback ${lastCorrect ? 'correct' : 'wrong'}`} style={{ marginBottom: '.75rem' }}>
-              {lastCorrect
-                ? '✅ Ótimo! Você se avaliou como correto.'
-                : '🟡 Flashcard criado automaticamente para revisão.'}
+              {lastCorrect ? '✅ Ótimo! Você se avaliou como correto.' : '🟡 Flashcard criado automaticamente para revisão.'}
             </div>
           )}
 
           {discursive ? (
             <Discursive
-              question={current}
-              answer={answer}
-              onTextChange={handleTextChange}
-              onShowModel={handleShowModel}
-              onSelfEval={handleSelfEval}
-              onNext={handleNext}
-              onCopyPrompt={handleCopyPrompt}
-              copied={copied}
+              question={current} answer={answer}
+              onTextChange={handleTextChange} onShowModel={handleShowModel}
+              onSelfEval={handleSelfEval} onNext={handleNext}
+              onCopyPrompt={handleCopyPrompt} copied={copied}
             />
           ) : (
             <MultipleChoice
-              question={current}
-              answer={answer}
-              onSelect={handleSelect}
-              onSubmit={handleSubmitMC}
-              onNext={handleNext}
-              onCopyPrompt={handleCopyPrompt}
-              copied={copied}
+              question={current} answer={answer}
+              onSelect={handleSelect} onSubmit={handleSubmitMC}
+              onNext={handleNext} onCopyPrompt={handleCopyPrompt} copied={copied}
             />
           )}
         </div>
