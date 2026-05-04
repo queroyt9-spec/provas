@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import type { Question, Attempt } from '../types'
+import { getMediaObjectUrl } from '../utils/mediaStorage'
 import {
   getExams,
   getQuestions,
@@ -293,6 +294,91 @@ function Discursive({
   )
 }
 
+// ── Aviso de mídia ausente (só mostra se não houver imagem no IndexedDB) ─────
+function MediaMissingBanner({ questionId, onSkip }: { questionId: string; onSkip: () => void }) {
+  const [hasStored, setHasStored] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getMediaObjectUrl(questionId).then((url) => {
+      if (cancelled) { if (url) URL.revokeObjectURL(url); return }
+      setHasStored(!!url)
+      if (url) URL.revokeObjectURL(url)
+    })
+    return () => { cancelled = true }
+  }, [questionId])
+
+  // While loading or if image is found, don't show the warning
+  if (hasStored === null || hasStored) return null
+
+  return (
+    <div style={{
+      background: '#fffbeb', border: '1px solid #fde68a',
+      borderRadius: 'var(--radius)', padding: '.65rem .9rem',
+      marginBottom: '.85rem', fontSize: '.88rem',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: '.75rem', flexWrap: 'wrap',
+    }}>
+      <span>
+        ⚠️ <strong>Esta questão exige uma imagem/tabela/gráfico.</strong>{' '}
+        Adicione a imagem na aba <strong>Importar → Questões com Mídia</strong> ou pule.
+      </span>
+      <button className="btn btn-warning btn-sm" onClick={onSkip}>
+        Pular questão →
+      </button>
+    </div>
+  )
+}
+
+// ── Mídia da questão (imagem/tabela/gráfico) ─────────────────────────────────
+function QuestionMedia({ question }: { question: Question }) {
+  const [url, setUrl] = useState<string | null>(question.media_url ?? null)
+  const prevUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    // Revoke previous object URL to avoid memory leaks
+    if (prevUrlRef.current && prevUrlRef.current !== question.media_url) {
+      URL.revokeObjectURL(prevUrlRef.current)
+      prevUrlRef.current = null
+    }
+
+    if (question.media_url) {
+      setUrl(question.media_url)
+      return
+    }
+
+    let cancelled = false
+    getMediaObjectUrl(question.id).then((objectUrl) => {
+      if (cancelled) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+        return
+      }
+      prevUrlRef.current = objectUrl
+      setUrl(objectUrl)
+    })
+
+    return () => { cancelled = true }
+  }, [question.id, question.media_url])
+
+  if (!url) return null
+
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <img
+        src={url}
+        alt="Imagem da questão"
+        style={{
+          maxWidth: '100%',
+          maxHeight: 400,
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          display: 'block',
+        }}
+      />
+    </div>
+  )
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function PracticePage() {
   const exams = getExams()
@@ -471,6 +557,12 @@ export default function PracticePage() {
           <div className="progress-bar-wrap mb-2">
             <div className="progress-bar" style={{ width: `${(index / questions.length) * 100}%` }} />
           </div>
+
+          {current.has_media && <QuestionMedia question={current} />}
+
+          {current.has_media && !current.media_url && (
+            <MediaMissingBanner questionId={current.id} onSkip={handleNext} />
+          )}
 
           <p style={{ lineHeight: '1.65', marginBottom: '1rem', fontSize: '.97rem', whiteSpace: 'pre-wrap' }}>
             {current.statement}

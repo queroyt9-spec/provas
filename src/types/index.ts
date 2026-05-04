@@ -28,6 +28,10 @@ export interface Question {
   explanation: string
   tags: string[]
   needs_review?: boolean
+  /** true quando o enunciado faz referência a imagem, tabela ou gráfico */
+  has_media?: boolean
+  /** URL externa ou data-URL da mídia (opcional; alternativa ao upload via IndexedDB) */
+  media_url?: string
 }
 
 export interface Attempt {
@@ -59,6 +63,8 @@ export interface ImportPayload {
       id?: string
       type?: QuestionType
       tags?: string[]
+      has_media?: boolean
+      media_url?: string
     }
   >
 }

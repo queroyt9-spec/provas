@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import type { ImportPayload, Exam, Question } from '../types'
-import { saveExam, saveQuestions, getExams } from '../utils/storage'
+import { saveExam, saveQuestions, getExams, getQuestions } from '../utils/storage'
+import { saveMedia, getMediaObjectUrl, deleteMedia, listMediaIds } from '../utils/mediaStorage'
 
 function buildContinuationPrompt(exam: Exam): string {
   return `Você é um extrator de questões de concurso.
@@ -28,10 +29,12 @@ Regras:
 5. Se não souber o tópico, deixe "topic": "".
 6. Use alternativas A, B, C, D, E.
 7. A saída deve ser APENAS o JSON, sem texto antes ou depois, sem blocos markdown (sem \`\`\`json).
-8. CRÍTICO — JSON válido com aspas:
+8. IMAGENS E TABELAS: Se o enunciado mencionar ou depender de imagem, tabela, gráfico ou figura,
+   marque "has_media": true. Se não há referência a mídia externa, use "has_media": false.
+9. CRÍTICO — JSON válido com aspas:
    - NUNCA coloque aspas duplas " dentro de valores string.
    - Substitua citações internas por aspas simples: 'texto citado'.
-9. Quebras de linha dentro de enunciados: use \\n (barra invertida + n), não quebras reais.
+10. Quebras de linha dentro de enunciados: use \\n (barra invertida + n), não quebras reais.
 
 Tipos de questão:
 - "multiple_choice": questão objetiva com alternativas A–E.
@@ -62,7 +65,8 @@ Esquema das questões:
       "alternatives": { "A": "", "B": "", "C": "", "D": "", "E": "" },
       "correct_answer": "",
       "explanation": "",
-      "needs_review": false
+      "needs_review": false,
+      "has_media": false
     }
   ]
 }`
@@ -83,7 +87,11 @@ Regras:
 5. Se não souber o tópico, deixe "topic": "".
 6. Use alternativas A, B, C, D, E.
 7. A saída deve ser APENAS o JSON, sem texto antes ou depois, sem blocos markdown (sem \`\`\`json).
-8. CRÍTICO — JSON válido com aspas:
+8. IMAGENS E TABELAS: Se o enunciado mencionar ou depender de imagem, tabela, gráfico ou figura
+   (ex: 'analise a imagem', 'observe o gráfico', 'de acordo com a tabela'),
+   marque "has_media": true. Mantenha o enunciado mesmo assim.
+   Se não há referência a mídia externa, use "has_media": false.
+9. CRÍTICO — JSON válido com aspas:
    - NUNCA coloque aspas duplas " dentro de valores string.
    - Se o texto original tiver uma citação como "sem proteção não há como aprender",
      substitua pelas aspas simples: 'sem proteção não há como aprender'.
@@ -125,7 +133,8 @@ Esquema:
       },
       "correct_answer": "",
       "explanation": "",
-      "needs_review": false
+      "needs_review": false,
+      "has_media": false
     },
     {
       "number": 2,
@@ -136,7 +145,8 @@ Esquema:
       "alternatives": {},
       "correct_answer": "Resposta modelo completa aqui...",
       "explanation": "",
-      "needs_review": false
+      "needs_review": false,
+      "has_media": false
     }
   ]
 }`
@@ -203,6 +213,8 @@ function parsePayload(raw: ImportPayload): { exam: Exam; questions: Question[] }
       explanation: q.explanation ?? '',
       tags: q.tags ?? [],
       needs_review: q.needs_review ?? false,
+      has_media: q.has_media ?? false,
+      media_url: q.media_url,
     }
   })
 
@@ -326,6 +338,180 @@ function PromptCard() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ── Gerenciador de mídia ──────────────────────────────────────────────────────
+function MediaManager() {
+  const allQuestions = getQuestions()
+  const mediaQuestions = allQuestions.filter((q) => q.has_media)
+
+  const [mediaIds, setMediaIds] = useState<Set<string>>(new Set())
+  const [previews, setPreviews] = useState<Record<string, string>>({})
+  const [uploading, setUploading] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'all' | 'missing' | 'done'>('all')
+
+  const loadMediaIds = useCallback(async () => {
+    const ids = await listMediaIds()
+    setMediaIds(ids)
+  }, [])
+
+  useEffect(() => { loadMediaIds() }, [loadMediaIds])
+
+  async function handleUpload(q: Question, file: File) {
+    setUploading(q.id)
+    try {
+      await saveMedia(q.id, file)
+      const url = await getMediaObjectUrl(q.id)
+      if (url) setPreviews((p) => ({ ...p, [q.id]: url }))
+      setMediaIds((ids) => new Set([...ids, q.id]))
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  async function handleDelete(questionId: string) {
+    await deleteMedia(questionId)
+    setPreviews((p) => { const n = { ...p }; delete n[questionId]; return n })
+    setMediaIds((ids) => { const n = new Set(ids); n.delete(questionId); return n })
+  }
+
+  async function handlePreview(q: Question) {
+    if (previews[q.id]) return
+    const url = await getMediaObjectUrl(q.id)
+    if (url) setPreviews((p) => ({ ...p, [q.id]: url }))
+  }
+
+  if (mediaQuestions.length === 0) return null
+
+  const exams = getExams()
+  const examMap = new Map(exams.map((e) => [e.id, e.title]))
+
+  const filtered = mediaQuestions.filter((q) => {
+    if (filter === 'missing') return !mediaIds.has(q.id) && !q.media_url
+    if (filter === 'done')    return mediaIds.has(q.id) || !!q.media_url
+    return true
+  })
+
+  const doneCount    = mediaQuestions.filter((q) => mediaIds.has(q.id) || !!q.media_url).length
+  const missingCount = mediaQuestions.length - doneCount
+
+  return (
+    <div className="card mt-3">
+      <h2 className="section-title">🖼️ Questões com Mídia</h2>
+      <p className="muted mb-2" style={{ fontSize: '.88rem' }}>
+        {mediaQuestions.length} questão{mediaQuestions.length > 1 ? 'ões' : ''} referem a imagem, tabela ou gráfico.
+        Faça o upload da imagem (screenshot ou recorte do PDF) para cada uma.
+      </p>
+
+      <div style={{ display: 'flex', gap: '.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {([['all', `Todas (${mediaQuestions.length})`], ['missing', `Sem imagem (${missingCount})`], ['done', `Com imagem (${doneCount})`]] as const).map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setFilter(val)}
+            className="btn btn-sm"
+            style={{
+              background: filter === val ? 'var(--brand)' : 'var(--surface)',
+              color: filter === val ? '#fff' : 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <p className="muted" style={{ fontSize: '.88rem' }}>Nenhuma questão nesta categoria.</p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
+        {filtered.map((q) => {
+          const hasUpload = mediaIds.has(q.id)
+          const hasUrl    = !!q.media_url
+          const hasMidia  = hasUpload || hasUrl
+          const preview   = previews[q.id] ?? (hasUrl ? q.media_url : null)
+
+          return (
+            <div
+              key={q.id}
+              style={{
+                border: `1px solid ${hasMidia ? '#bbf7d0' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)',
+                padding: '.75rem 1rem',
+                background: hasMidia ? '#f0fdf4' : 'var(--surface)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '.75rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="gap-sm mb-1" style={{ flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '.78rem', color: 'var(--muted)' }}>
+                      {examMap.get(q.exam_id) ?? q.exam_id} — Q{q.number}
+                    </span>
+                    {hasMidia
+                      ? <span style={{ fontSize: '.75rem', background: '#dcfce7', color: '#166534', padding: '.1rem .45rem', borderRadius: 9999 }}>✅ com imagem</span>
+                      : <span style={{ fontSize: '.75rem', background: '#fef3c7', color: '#92400e', padding: '.1rem .45rem', borderRadius: 9999 }}>⚠️ sem imagem</span>
+                    }
+                  </div>
+                  <p style={{ fontSize: '.88rem', lineHeight: 1.5, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {q.statement}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                  <label
+                    style={{
+                      cursor: uploading === q.id ? 'wait' : 'pointer',
+                      background: 'var(--brand)', color: '#fff',
+                      padding: '.3rem .75rem', borderRadius: 'var(--radius)',
+                      fontSize: '.82rem', fontWeight: 600, whiteSpace: 'nowrap',
+                      opacity: uploading === q.id ? .6 : 1,
+                    }}
+                  >
+                    {uploading === q.id ? 'Salvando…' : hasMidia ? '🔄 Trocar imagem' : '📁 Upload imagem'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      disabled={uploading === q.id}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleUpload(q, file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                  {hasUpload && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '.78rem', color: 'var(--danger)' }}
+                      onClick={() => handleDelete(q.id)}
+                    >
+                      Remover
+                    </button>
+                  )}
+                  {hasMidia && !preview && (
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: '.78rem' }} onClick={() => handlePreview(q)}>
+                      Ver imagem
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {preview && (
+                <div style={{ marginTop: '.75rem' }}>
+                  <img
+                    src={preview}
+                    alt="Mídia da questão"
+                    style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'block' }}
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -525,6 +711,7 @@ export default function ImportPage() {
       </div>
 
       <PromptCard />
+      <MediaManager />
     </div>
   )
 }
