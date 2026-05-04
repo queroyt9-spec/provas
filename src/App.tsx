@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { DataProvider } from './contexts/DataContext'
 import { supabaseConfigured } from './lib/supabase'
 import Navbar from './components/Navbar'
+import { useData } from './contexts/DataContext'
 import LoginPage from './pages/LoginPage'
 import ImportPage from './pages/ImportPage'
 import PracticePage from './pages/PracticePage'
@@ -42,6 +43,19 @@ function NotConfigured() {
   )
 }
 
+function DbErrorBanner() {
+  const { dbError } = useData()
+  if (!dbError) return null
+  return (
+    <div style={{
+      background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8,
+      padding: '.75rem 1rem', margin: '1rem', fontSize: '.87rem', color: '#991b1b',
+    }}>
+      ⚠️ <strong>Problema com o banco de dados:</strong> {dbError}
+    </div>
+  )
+}
+
 function AppShell() {
   const { loggedIn } = useAuth()
   if (!loggedIn) return <LoginPage />
@@ -49,6 +63,7 @@ function AppShell() {
     <DataProvider>
       <div className="layout">
         <Navbar />
+        <DbErrorBanner />
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/praticar" replace />} />

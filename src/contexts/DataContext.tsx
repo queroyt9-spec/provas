@@ -17,6 +17,7 @@ type DataContextValue = {
   attempts: Attempt[]
   flashcards: Flashcard[]
   loading: boolean
+  dbError: string
   saveExam(exam: Exam): Promise<void>
   saveQuestions(qs: Question[]): Promise<void>
   saveAttempt(a: Attempt): Promise<void>
@@ -44,15 +45,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [attempts, setAttempts]     = useState<Attempt[]>([])
   const [flashcards, setFlashcards] = useState<Flashcard[]>([])
   const [loading, setLoading]       = useState(true)
+  const [dbError, setDbError]       = useState('')
 
   const loadAll = useCallback(async () => {
     setLoading(true)
-    const [{ data: e }, { data: q }, { data: a }, { data: f }] = await Promise.all([
+    setDbError('')
+    const [{ data: e, error: eErr }, { data: q }, { data: a }, { data: f }] = await Promise.all([
       supabase.from('exams').select('*').order('year', { ascending: false }),
       supabase.from('questions').select('*'),
       supabase.from('attempts').select('*'),
       supabase.from('flashcards').select('*'),
     ])
+    if (eErr) {
+      setDbError(`Erro ao carregar dados do Supabase: ${eErr.message}. Verifique se as tabelas foram criadas (execute o supabase-setup.sql).`)
+    }
     setExams(e ?? [])
     setQuestions((q ?? []).map(normalizeQuestion))
     setAttempts(a ?? [])
@@ -63,7 +69,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { loadAll() }, [loadAll])
 
   async function saveExam(exam: Exam): Promise<void> {
-    await supabase.from('exams').upsert(exam)
+    const { error } = await supabase.from('exams').upsert(exam)
+    if (error) throw new Error(`Erro ao salvar prova: ${error.message}`)
     setExams((prev) => {
       const idx = prev.findIndex((e) => e.id === exam.id)
       return idx >= 0 ? prev.map((e, i) => (i === idx ? exam : e)) : [...prev, exam]
@@ -71,7 +78,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function saveQuestions(incoming: Question[]): Promise<void> {
-    await supabase.from('questions').upsert(incoming)
+    const { error } = await supabase.from('questions').upsert(incoming)
+    if (error) throw new Error(`Erro ao salvar questões: ${error.message}`)
     setQuestions((prev) => {
       const map = new Map(prev.map((q) => [q.id, q]))
       for (const q of incoming) map.set(q.id, q)
@@ -133,7 +141,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      exams, questions, attempts, flashcards, loading,
+      exams, questions, attempts, flashcards, loading, dbError,
       saveExam, saveQuestions, saveAttempt, saveFlashcard,
       saveMedia, deleteMedia, importAll, exportData,
     }}>
