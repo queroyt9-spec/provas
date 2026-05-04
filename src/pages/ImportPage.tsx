@@ -552,7 +552,7 @@ function MediaManager() {
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function ImportPage() {
   const { exams, saveExam, saveQuestions, loading } = useData()
-  const { signOut, user } = useAuth()
+  const { signOut } = useAuth()
 
   const [text, setText]       = useState('')
   const [preview, setPreview] = useState<PreviewState | null>(null)
@@ -646,10 +646,7 @@ export default function ImportPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem' }}>
         <h1 className="page-title" style={{ margin: 0 }}>Importar Questões</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-          <span className="muted" style={{ fontSize: '.82rem' }}>{user?.email}</span>
-          <button className="btn btn-ghost btn-sm" onClick={signOut}>Sair</button>
-        </div>
+        <button className="btn btn-ghost btn-sm" onClick={signOut}>Sair</button>
       </div>
 
       <BackupCard />
