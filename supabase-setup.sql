@@ -7,7 +7,6 @@
 
 create table if not exists exams (
   id              text primary key,
-  user_id         uuid not null references auth.users(id) on delete cascade,
   title           text not null default '',
   year            integer not null default 0,
   board           text not null default '',
@@ -22,7 +21,6 @@ create table if not exists exams (
 
 create table if not exists questions (
   id              text primary key,
-  user_id         uuid not null references auth.users(id) on delete cascade,
   exam_id         text not null references exams(id) on delete cascade,
   number          integer not null default 0,
   type            text not null default 'multiple_choice',
@@ -41,7 +39,6 @@ create table if not exists questions (
 
 create table if not exists attempts (
   id              text primary key,
-  user_id         uuid not null references auth.users(id) on delete cascade,
   question_id     text not null references questions(id) on delete cascade,
   selected_answer text not null default '',
   is_correct      boolean not null default false,
@@ -50,7 +47,6 @@ create table if not exists attempts (
 
 create table if not exists flashcards (
   id              text primary key,
-  user_id         uuid not null references auth.users(id) on delete cascade,
   question_id     text not null references questions(id) on delete cascade,
   front           text not null default '',
   back            text not null default '',
@@ -61,37 +57,9 @@ create table if not exists flashcards (
   created_at      timestamptz default now()
 );
 
--- 2. Row Level Security ───────────────────────────────────────
-
-alter table exams      enable row level security;
-alter table questions  enable row level security;
-alter table attempts   enable row level security;
-alter table flashcards enable row level security;
-
-create policy "Usuário vê seus próprios exames"
-  on exams for all using (auth.uid() = user_id);
-
-create policy "Usuário vê suas próprias questões"
-  on questions for all using (auth.uid() = user_id);
-
-create policy "Usuário vê suas próprias tentativas"
-  on attempts for all using (auth.uid() = user_id);
-
-create policy "Usuário vê seus próprios flashcards"
-  on flashcards for all using (auth.uid() = user_id);
+-- 2. Sem RLS — acesso aberto via anon key ─────────────────────
+-- O app usa senha local para proteger o acesso.
 
 -- 3. Storage bucket ───────────────────────────────────────────
--- Execute separadamente no painel Storage > New bucket:
+-- No painel Storage > New bucket:
 --   Nome: question-media  |  Public: SIM
-
--- Depois execute esta policy:
-create policy "Usuário gerencia suas próprias mídias"
-  on storage.objects for all
-  using (
-    bucket_id = 'question-media'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  )
-  with check (
-    bucket_id = 'question-media'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );

@@ -29,10 +29,13 @@ function NotConfigured() {
                 <div><strong>VITE_SUPABASE_ANON_KEY</strong> = eyJ...</div>
               </div>
             </li>
-            <li>Clique em <strong>Redeploy</strong> no Vercel.</li>
             <li>Execute o arquivo <code>supabase-setup.sql</code> no <strong>SQL Editor</strong> do Supabase.</li>
             <li>Em <strong>Storage</strong>, crie um bucket chamado <code>question-media</code> (marcar como Public).</li>
+            <li>Clique em <strong>Redeploy</strong> no Vercel.</li>
           </ol>
+          <p style={{ marginTop: '1rem', fontSize: '.88rem', color: '#6b7280' }}>
+            A senha padrão para entrar é <strong>sedsc2026</strong>. Para trocar, adicione a variável <code>VITE_APP_PASSWORD</code> no Vercel.
+          </p>
         </div>
       </div>
     </div>
@@ -40,18 +43,8 @@ function NotConfigured() {
 }
 
 function AppShell() {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--muted)' }}>Carregando…</p>
-      </div>
-    )
-  }
-
-  if (!user) return <LoginPage />
-
+  const { loggedIn } = useAuth()
+  if (!loggedIn) return <LoginPage />
   return (
     <DataProvider>
       <div className="layout">
@@ -71,7 +64,6 @@ function AppShell() {
 
 export default function App() {
   if (!supabaseConfigured) return <NotConfigured />
-
   return (
     <HashRouter>
       <AuthProvider>
