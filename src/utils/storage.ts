@@ -89,6 +89,57 @@ export function getDueFlashcards(): Flashcard[] {
   return getFlashcards().filter((c) => c.due_at <= now)
 }
 
+// ── Backup / Restore ───────────────────────────────────────
+
+export interface BackupData {
+  version: 1
+  exported_at: string
+  exams: Exam[]
+  questions: Question[]
+  attempts: Attempt[]
+  flashcards: Flashcard[]
+}
+
+export function exportBackup(): BackupData {
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    exams: getExams(),
+    questions: getQuestions(),
+    attempts: getAttempts(),
+    flashcards: getFlashcards(),
+  }
+}
+
+/**
+ * Merges a backup into the current data.
+ * Existing records are overwritten if they share the same ID.
+ * Returns counts of what was merged.
+ */
+export function importBackup(data: BackupData): { exams: number; questions: number; attempts: number; flashcards: number } {
+  for (const exam of data.exams ?? []) saveExam(exam)
+
+  const questions: Question[] = (data.questions ?? []).map((q) => ({
+    ...q,
+    type: q.type ?? (Object.keys(q.alternatives ?? {}).length === 0 ? 'discursive' : 'multiple_choice'),
+  }))
+  saveQuestions(questions)
+
+  const allAttempts = getAttempts()
+  const existingIds = new Set(allAttempts.map((a) => a.id))
+  const newAttempts = (data.attempts ?? []).filter((a) => !existingIds.has(a.id))
+  save(KEYS.attempts, [...allAttempts, ...newAttempts])
+
+  for (const card of data.flashcards ?? []) saveFlashcard(card)
+
+  return {
+    exams: data.exams?.length ?? 0,
+    questions: data.questions?.length ?? 0,
+    attempts: newAttempts.length,
+    flashcards: data.flashcards?.length ?? 0,
+  }
+}
+
 /**
  * Rebuilds front/back of every saved flashcard using the current format.
  * Call once at app startup to migrate cards created with the old format.

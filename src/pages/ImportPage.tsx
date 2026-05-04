@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import type { ImportPayload, Exam, Question } from '../types'
-import { saveExam, saveQuestions, getExams, getQuestions } from '../utils/storage'
+import { saveExam, saveQuestions, getExams, getQuestions, exportBackup, importBackup, type BackupData } from '../utils/storage'
 import { saveMedia, getMediaObjectUrl, deleteMedia, listMediaIds } from '../utils/mediaStorage'
 
 function buildContinuationPrompt(exam: Exam): string {
@@ -342,6 +342,92 @@ function PromptCard() {
   )
 }
 
+// ── Backup / Restaurar dados ──────────────────────────────────────────────────
+function BackupCard() {
+  const [restoreStatus, setRestoreStatus] = useState<'idle' | 'ok' | 'err'>('idle')
+  const [restoreMsg, setRestoreMsg]       = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function handleExport() {
+    const data = exportBackup()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    a.href     = url
+    a.download = `backup-sedsc-${date}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleRestoreFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string) as BackupData
+        if (data.version !== 1 || !Array.isArray(data.exams)) {
+          throw new Error('Arquivo de backup inválido.')
+        }
+        const counts = importBackup(data)
+        setRestoreStatus('ok')
+        setRestoreMsg(
+          `✅ Restaurado com sucesso: ${counts.exams} prova(s), ${counts.questions} questão(ões), ` +
+          `${counts.flashcards} flashcard(s). Recarregue a página para ver tudo.`
+        )
+      } catch (err) {
+        setRestoreStatus('err')
+        setRestoreMsg(`❌ Erro ao restaurar: ${String(err)}`)
+      }
+      if (fileRef.current) fileRef.current.value = ''
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="card mb-2" style={{ borderLeft: '4px solid var(--brand)' }}>
+      <p style={{ fontWeight: 600, marginBottom: '.25rem' }}>📦 Backup — usar em outro dispositivo</p>
+      <p className="muted mb-2" style={{ fontSize: '.87rem' }}>
+        As questões ficam salvas <strong>só neste navegador</strong>. Para acessar em outro computador ou celular, exporte o backup aqui e importe lá.
+      </p>
+
+      <div className="gap-sm" style={{ flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={handleExport}>
+          ⬇️ Exportar backup
+        </button>
+        <label style={{ cursor: 'pointer' }}>
+          <span className="btn btn-ghost">
+            ⬆️ Restaurar backup
+          </span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={handleRestoreFile}
+          />
+        </label>
+      </div>
+
+      {restoreStatus !== 'idle' && (
+        <div className={`feedback ${restoreStatus === 'ok' ? 'correct' : 'wrong'}`} style={{ marginTop: '.75rem' }}>
+          {restoreMsg}
+          {restoreStatus === 'ok' && (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ marginLeft: '1rem' }}
+              onClick={() => window.location.reload()}
+            >
+              Recarregar agora
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Gerenciador de mídia ──────────────────────────────────────────────────────
 function MediaManager() {
   const allQuestions = getQuestions()
@@ -606,6 +692,8 @@ export default function ImportPage() {
   return (
     <div>
       <h1 className="page-title">Importar Questões</h1>
+
+      <BackupCard />
 
       <div className="card mb-2">
         <label>Selecionar arquivo JSON</label>
