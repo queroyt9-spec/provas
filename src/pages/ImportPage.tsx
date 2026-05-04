@@ -3,7 +3,7 @@ import { jsonrepair } from 'jsonrepair'
 import type { ImportPayload, Exam, Question } from '../types'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
-import { downloadBackup, parseBackup, type BackupData } from '../utils/storage'
+import { downloadBackup, parseBackup } from '../utils/storage'
 
 function buildContinuationPrompt(exam: Exam): string {
   return `Você é um extrator de questões de concurso.
