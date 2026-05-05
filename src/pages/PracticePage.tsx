@@ -393,6 +393,16 @@ export default function PracticePage() {
     setIndex((i) => i + 1); setAnswer(null); setCopied(false); setLastCorrect(null)
   }
 
+  function handleSkip() {
+    setIndex((i) => Math.min(i + 1, questions.length - 1))
+    setAnswer(null); setCopied(false); setLastCorrect(null)
+  }
+
+  function handlePrev() {
+    setIndex((i) => Math.max(i - 1, 0))
+    setAnswer(null); setCopied(false); setLastCorrect(null)
+  }
+
   function handleOpenChatGPT() {
     if (!current || !answer) return
     const correct = lastCorrect ?? false
@@ -465,12 +475,28 @@ export default function PracticePage() {
         </div>
       ) : (
         <div className="card">
-          <div className="gap-sm mb-2" style={{ alignItems: 'center' }}>
-            <span className="counter">Questão {index + 1} de {questions.length}</span>
-            {discursive && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>}
-            {current.area  && <span className="badge">{current.area}</span>}
-            {current.topic && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>{current.topic}</span>}
-            <QuestionHistory questionId={current.id} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem', gap: '.5rem' }}>
+            <div className="gap-sm" style={{ alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+              <span className="counter">Questão {index + 1} de {questions.length}</span>
+              {discursive && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>}
+              {current.area  && <span className="badge">{current.area}</span>}
+              {current.topic && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>{current.topic}</span>}
+              <QuestionHistory questionId={current.id} />
+            </div>
+            <div style={{ display: 'flex', gap: '.3rem', flexShrink: 0 }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handlePrev}
+                disabled={index === 0}
+                title="Questão anterior"
+              >← Ant.</button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleSkip}
+                disabled={index >= questions.length - 1}
+                title="Pular sem responder"
+              >Pular →</button>
+            </div>
           </div>
 
           <div className="progress-bar-wrap mb-2">
