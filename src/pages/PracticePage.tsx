@@ -171,11 +171,11 @@ function MediaMissingBanner({ onSkip }: { onSkip: () => void }) {
 
 // ── Múltipla escolha ─────────────────────────────────────────────────────────
 function MultipleChoice({
-  question, answer, onSelect, onSubmit, onNext, onCopyPrompt, copied,
+  question, answer, onSelect, onSubmit, onNext, onOpenChatGPT, opened,
 }: {
   question: Question; answer: AnswerState | null
   onSelect(l: string): void; onSubmit(): void; onNext(): void
-  onCopyPrompt(): void; copied: boolean
+  onOpenChatGPT(): void; opened: boolean
 }) {
   const submitted = !!answer?.submitted
   return (
@@ -212,8 +212,8 @@ function MultipleChoice({
           )}
           <div className="gap-sm">
             <button className="btn btn-primary" onClick={onNext}>Próxima questão →</button>
-            <button className="btn btn-ghost btn-sm" onClick={onCopyPrompt}>
-              {copied ? '✅ Copiado!' : '💬 Pedir explicação ao ChatGPT'}
+            <button className="btn btn-ghost btn-sm" onClick={onOpenChatGPT}>
+              {opened ? '✅ Aberto!' : '💬 Explicar no ChatGPT'}
             </button>
           </div>
         </>
@@ -224,11 +224,11 @@ function MultipleChoice({
 
 // ── Discursiva ───────────────────────────────────────────────────────────────
 function Discursive({
-  question, answer, onTextChange, onShowModel, onSelfEval, onNext, onCopyPrompt, copied,
+  question, answer, onTextChange, onShowModel, onSelfEval, onNext, onOpenChatGPT, opened,
 }: {
   question: Question; answer: AnswerState | null
   onTextChange(t: string): void; onShowModel(): void; onSelfEval(correct: boolean): void
-  onNext(): void; onCopyPrompt(): void; copied: boolean
+  onNext(): void; onOpenChatGPT(): void; opened: boolean
 }) {
   const showModel = !!answer?.showModel
   const submitted = !!answer?.submitted
@@ -265,8 +265,8 @@ function Discursive({
           ) : (
             <div className="gap-sm">
               <button className="btn btn-primary" onClick={onNext}>Próxima questão →</button>
-              <button className="btn btn-ghost btn-sm" onClick={onCopyPrompt}>
-                {copied ? '✅ Copiado!' : '💬 Pedir explicação ao ChatGPT'}
+              <button className="btn btn-ghost btn-sm" onClick={onOpenChatGPT}>
+                {opened ? '✅ Aberto!' : '💬 Explicar no ChatGPT'}
               </button>
             </div>
           )}
@@ -391,13 +391,14 @@ export default function PracticePage() {
     setIndex((i) => i + 1); setAnswer(null); setCopied(false); setLastCorrect(null)
   }
 
-  function handleCopyPrompt() {
+  function handleOpenChatGPT() {
     if (!current || !answer) return
     const correct = lastCorrect ?? false
     const text = discursive
       ? buildDiscursivePrompt(current, answer.selected, correct)
       : buildMCPrompt(current, answer.selected, correct)
-    navigator.clipboard.writeText(text)
+    const url = `https://chatgpt.com/?q=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
     setCopied(true)
   }
 
@@ -495,13 +496,13 @@ export default function PracticePage() {
               question={current} answer={answer}
               onTextChange={handleTextChange} onShowModel={handleShowModel}
               onSelfEval={handleSelfEval} onNext={handleNext}
-              onCopyPrompt={handleCopyPrompt} copied={copied}
+              onOpenChatGPT={handleOpenChatGPT} opened={copied}
             />
           ) : (
             <MultipleChoice
               question={current} answer={answer}
               onSelect={handleSelect} onSubmit={handleSubmitMC}
-              onNext={handleNext} onCopyPrompt={handleCopyPrompt} copied={copied}
+              onNext={handleNext} onOpenChatGPT={handleOpenChatGPT} opened={copied}
             />
           )}
         </div>
