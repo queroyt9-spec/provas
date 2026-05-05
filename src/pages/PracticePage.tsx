@@ -3,7 +3,8 @@ import type { Question, Attempt } from '../types'
 import { useData } from '../contexts/DataContext'
 import { createFlashcardFromQuestion } from '../utils/flashcardUtils'
 
-type Filter = { examId: string; area: string }
+type StatusFilter = 'all' | 'unseen' | 'correct' | 'wrong'
+type Filter = { examId: string; area: string; status: StatusFilter }
 type AnswerState = { selected: string; submitted: boolean; showModel?: boolean }
 
 function isDiscursive(q: Question) {
@@ -277,14 +278,20 @@ function Discursive({
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function PracticePage() {
-  const { exams, questions: allQuestions, flashcards, saveAttempt, saveFlashcard, loading } = useData()
+  const { exams, questions: allQuestions, attempts, flashcards, saveAttempt, saveFlashcard, loading } = useData()
 
-  const [filter, setFilter]   = useState<Filter>({ examId: '', area: '' })
+  const [filter, setFilter]   = useState<Filter>({ examId: '', area: '', status: 'all' })
   const [index, setIndex]     = useState(0)
   const [answer, setAnswer]   = useState<AnswerState | null>(null)
   const [copied, setCopied]   = useState(false)
   const [tick, setTick]       = useState(0)
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
+
+  const lastResult = useMemo(() => {
+    const map = new Map<string, boolean>()
+    for (const a of attempts) map.set(a.question_id, a.is_correct)
+    return map
+  }, [attempts])
 
   const areas = useMemo(() => {
     const base = filter.examId ? allQuestions.filter((q) => q.exam_id === filter.examId) : allQuestions
@@ -295,8 +302,11 @@ export default function PracticePage() {
     let qs = allQuestions
     if (filter.examId) qs = qs.filter((q) => q.exam_id === filter.examId)
     if (filter.area)   qs = qs.filter((q) => q.area === filter.area)
+    if (filter.status === 'unseen')  qs = qs.filter((q) => !lastResult.has(q.id))
+    if (filter.status === 'correct') qs = qs.filter((q) => lastResult.get(q.id) === true)
+    if (filter.status === 'wrong')   qs = qs.filter((q) => lastResult.get(q.id) === false)
     return qs
-  }, [allQuestions, filter])
+  }, [allQuestions, filter, lastResult])
 
   const current: Question | undefined = questions[index]
   const discursive = current ? isDiscursive(current) : false
@@ -324,7 +334,7 @@ export default function PracticePage() {
 
   function handleFilterChange(key: keyof Filter, value: string) {
     setFilter((f) => ({ ...f, [key]: value, ...(key === 'examId' ? { area: '' } : {}) }))
-    setIndex(0); setAnswer(null); setLastCorrect(null)
+    setIndex(0); setAnswer(null); setLastCorrect(null); setCopied(false)
   }
 
   function handleSelect(letter: string) {
@@ -412,6 +422,31 @@ export default function PracticePage() {
               <option value="">Todas as áreas</option>
               {areas.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
+          </div>
+        </div>
+        <div style={{ marginTop: '.75rem' }}>
+          <label>Status</label>
+          <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginTop: '.35rem' }}>
+            {([
+              ['all',     '📋 Todas'],
+              ['unseen',  '⬜ Não respondidas'],
+              ['correct', '✅ Acertadas'],
+              ['wrong',   '❌ Erradas'],
+            ] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => handleFilterChange('status', val)}
+                className="btn btn-sm"
+                style={{
+                  background: filter.status === val ? 'var(--brand)' : 'var(--surface)',
+                  color: filter.status === val ? '#fff' : 'var(--text)',
+                  border: '1px solid var(--border)',
+                  fontWeight: filter.status === val ? 600 : 400,
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
