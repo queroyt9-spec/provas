@@ -30,6 +30,20 @@ type DataContextValue = {
 
 const DataContext = createContext<DataContextValue>(null!)
 
+function getFileExtension(file: File): string {
+  const fromName = file.name.split('.').pop()?.toLowerCase()
+  if (fromName && /^[a-z0-9]+$/.test(fromName)) return fromName
+
+  const byMime: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+  }
+  return byMime[file.type] ?? 'bin'
+}
+
 function normalizeQuestion(q: Question): Question {
   return {
     ...q,
@@ -101,16 +115,52 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function saveMedia(questionId: string, file: File): Promise<void> {
-    const path = `media/${questionId}`
-    await supabase.storage.from('question-media').upload(path, file, { upsert: true })
-    const { data } = supabase.storage.from('question-media').getPublicUrl(path)
-    const mediaUrl = data.publicUrl
-    await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId)
+    const bucket = supabase.storage.from('question-media')
+    const ext = getFileExtension(file)
+    const baseFolder = 'media'
+    const baseName = questionId
+
+    // Remove versões antigas da mídia dessa questão para evitar URL quebrada por troca de extensão.
+    const { data: existingFiles, error: listError } = await bucket.list(baseFolder)
+    if (listError) throw new Error(`Erro ao listar mídias: ${listError.message}`)
+
+    const oldPaths = (existingFiles ?? [])
+      .filter((f) => f.name === baseName || f.name.startsWith(`${baseName}.`))
+      .map((f) => `${baseFolder}/${f.name}`)
+
+    if (oldPaths.length > 0) {
+      const { error: removeOldError } = await bucket.remove(oldPaths)
+      if (removeOldError) throw new Error(`Erro ao remover mídia antiga: ${removeOldError.message}`)
+    }
+
+    const path = `${baseFolder}/${baseName}.${ext}`
+    const { error: uploadError } = await bucket.upload(path, file, {
+      upsert: true,
+      contentType: file.type || undefined,
+      cacheControl: '3600',
+    })
+    if (uploadError) throw new Error(`Erro no upload da mídia: ${uploadError.message}`)
+
+    const { data } = bucket.getPublicUrl(path)
+    const mediaUrl = `${data.publicUrl}?v=${Date.now()}`
+    const { error: updateError } = await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId)
+    if (updateError) throw new Error(`Erro ao salvar URL da mídia: ${updateError.message}`)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: mediaUrl } : q)))
   }
 
   async function deleteMedia(questionId: string): Promise<void> {
-    await supabase.storage.from('question-media').remove([`media/${questionId}`])
+    const bucket = supabase.storage.from('question-media')
+    const baseFolder = 'media'
+    const baseName = questionId
+    const { data: existingFiles } = await bucket.list(baseFolder)
+    const pathsToRemove = (existingFiles ?? [])
+      .filter((f) => f.name === baseName || f.name.startsWith(`${baseName}.`))
+      .map((f) => `${baseFolder}/${f.name}`)
+
+    if (pathsToRemove.length > 0) {
+      await bucket.remove(pathsToRemove)
+    }
+
     await supabase.from('questions').update({ media_url: null }).eq('id', questionId)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: undefined } : q)))
   }
