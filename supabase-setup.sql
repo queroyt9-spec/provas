@@ -63,3 +63,32 @@ create table if not exists flashcards (
 -- 3. Storage bucket ───────────────────────────────────────────
 -- No painel Storage > New bucket:
 --   Nome: question-media  |  Public: SIM
+
+-- 4. Policies para Storage (question-media) ───────────────────
+-- Sem estas policies, o upload retorna:
+-- "new row violates row-level security policy"
+
+drop policy if exists "question-media public read" on storage.objects;
+create policy "question-media public read"
+on storage.objects for select
+to public
+using (bucket_id = 'question-media');
+
+drop policy if exists "question-media anon insert" on storage.objects;
+create policy "question-media anon insert"
+on storage.objects for insert
+to anon
+with check (bucket_id = 'question-media');
+
+drop policy if exists "question-media anon update" on storage.objects;
+create policy "question-media anon update"
+on storage.objects for update
+to anon
+using (bucket_id = 'question-media')
+with check (bucket_id = 'question-media');
+
+drop policy if exists "question-media anon delete" on storage.objects;
+create policy "question-media anon delete"
+on storage.objects for delete
+to anon
+using (bucket_id = 'question-media');
