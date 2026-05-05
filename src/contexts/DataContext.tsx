@@ -23,6 +23,7 @@ type DataContextValue = {
   saveQuestions(qs: Question[]): Promise<void>
   saveAttempt(a: Attempt): Promise<void>
   saveFlashcard(c: Flashcard): Promise<void>
+  deleteExam(examId: string): Promise<void>
   saveMedia(questionId: string, file: File): Promise<void>
   deleteMedia(questionId: string): Promise<void>
   importAll(data: BackupData): Promise<{ exams: number; questions: number; attempts: number; flashcards: number }>
@@ -128,6 +129,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
+  async function deleteExam(examId: string): Promise<void> {
+    // Cascata no banco já remove questions → attempts/flashcards automaticamente.
+    const { error } = await supabase.from('exams').delete().eq('id', examId).eq('user_id', currentUser)
+    if (error) throw new Error(`Erro ao deletar prova: ${error.message}`)
+    const removedQuestionIds = new Set(questions.filter((q) => q.exam_id === examId).map((q) => q.id))
+    setExams((prev) => prev.filter((e) => e.id !== examId))
+    setQuestions((prev) => prev.filter((q) => q.exam_id !== examId))
+    setAttempts((prev) => prev.filter((a) => !removedQuestionIds.has(a.question_id)))
+    setFlashcards((prev) => prev.filter((f) => !removedQuestionIds.has(f.question_id)))
+  }
+
   async function saveMedia(questionId: string, file: File): Promise<void> {
     const bucket = supabase.storage.from('question-media')
     const ext = getFileExtension(file)
@@ -213,7 +225,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     <DataContext.Provider value={{
       exams, questions, attempts, flashcards, loading, dbError,
       saveExam, saveQuestions, saveAttempt, saveFlashcard,
-      saveMedia, deleteMedia, importAll, exportData,
+      deleteExam, saveMedia, deleteMedia, importAll, exportData,
     }}>
       {children}
     </DataContext.Provider>

@@ -395,6 +395,83 @@ function PromptCard() {
   )
 }
 
+// ── Gerenciador de provas ─────────────────────────────────────────────────────
+function ExamManager() {
+  const { exams, questions, deleteExam } = useData()
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting]   = useState<string | null>(null)
+  const [error, setError]         = useState('')
+
+  if (exams.length === 0) return null
+
+  const questionCount = (examId: string) => questions.filter((q) => q.exam_id === examId).length
+
+  async function handleDelete(examId: string) {
+    setDeleting(examId)
+    setError('')
+    try {
+      await deleteExam(examId)
+    } catch (err) {
+      setError(`Erro ao deletar: ${String(err)}`)
+    } finally {
+      setDeleting(null)
+      setConfirmId(null)
+    }
+  }
+
+  return (
+    <div className="card mt-2">
+      <h2 className="section-title">📋 Provas Importadas</h2>
+      {error && <div className="feedback wrong" style={{ marginBottom: '.75rem' }}>{error}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
+        {exams.map((exam) => (
+          <div
+            key={exam.id}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              gap: '.75rem', flexWrap: 'wrap',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+              padding: '.6rem .85rem', background: 'var(--surface)',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontWeight: 500, fontSize: '.92rem' }}>{exam.title}</span>
+              <span style={{ color: 'var(--muted)', fontSize: '.8rem', marginLeft: '.5rem' }}>
+                {exam.year} · {questionCount(exam.id)} questões
+              </span>
+            </div>
+
+            {confirmId === exam.id ? (
+              <div className="gap-sm">
+                <span style={{ fontSize: '.82rem', color: 'var(--danger)' }}>Confirmar exclusão?</span>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--danger)', color: '#fff', border: 'none' }}
+                  onClick={() => handleDelete(exam.id)}
+                  disabled={deleting === exam.id}
+                >
+                  {deleting === exam.id ? 'Deletando…' : 'Sim, deletar'}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmId(null)}>
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ color: 'var(--danger)', borderColor: 'var(--danger)', flexShrink: 0 }}
+                onClick={() => setConfirmId(exam.id)}
+              >
+                🗑️ Deletar
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Gerenciador de mídia ──────────────────────────────────────────────────────
 function MediaManager() {
   const { questions, exams, saveMedia, deleteMedia } = useData()
@@ -743,6 +820,7 @@ export default function ImportPage() {
         </ol>
       </div>
 
+      <ExamManager />
       <PromptCard />
       <MediaManager />
     </div>
