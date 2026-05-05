@@ -418,7 +418,7 @@ export default function PracticePage() {
       <h1 className="page-title">Praticar Questões</h1>
 
       <div className="card mb-2">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
+        <div className="practice-filters-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
           <div>
             <label>Prova</label>
             <select value={filter.examId} onChange={(e) => handleFilterChange('examId', e.target.value)}>

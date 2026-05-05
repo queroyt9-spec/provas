@@ -45,12 +45,17 @@ nav.navbar {
   position: sticky;
   top: 0;
   z-index: 50;
+  width: 100%;
+  overflow: hidden;
 }
 nav.navbar .brand {
   font-weight: 700;
   font-size: 1rem;
   flex: 1;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .navbar-desktop-links { display: flex; align-items: center; gap: .25rem; }
 .navbar-desktop-links a {
@@ -67,6 +72,10 @@ nav.navbar .brand {
   font-size: .88rem; color: rgba(255,255,255,.8);
   padding: .25rem .5rem; border-radius: var(--radius);
   white-space: nowrap;
+  min-width: 0;
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .navbar-logout:hover { color: #fff; background: rgba(255,255,255,.15); }
 
@@ -76,6 +85,10 @@ nav.navbar .brand {
 }
 @media (max-width: 640px) {
   .navbar-desktop-links { display: none; }
+  nav.navbar { padding: 0 .75rem; }
+  nav.navbar .brand { font-size: .94rem; }
+  .navbar-logout { font-size: .8rem; max-width: 36vw; }
+  .practice-filters-grid { grid-template-columns: 1fr !important; }
   .bottom-nav {
     display: flex;
     position: fixed;

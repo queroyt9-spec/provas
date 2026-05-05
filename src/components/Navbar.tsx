@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function Navbar() {
   const { signOut, currentUser } = useAuth()
+  const shortUser = currentUser.length > 12 ? `${currentUser.slice(0, 12)}…` : currentUser
 
   return (
     <>
@@ -22,7 +23,7 @@ export default function Navbar() {
           className="navbar-logout"
           title={`Sair (${currentUser})`}
         >
-          {currentUser} ↩
+          {shortUser} ↩
         </button>
       </nav>
 
