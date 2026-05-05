@@ -1,13 +1,18 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function LoginPage() {
   const { signIn } = useAuth()
+  const navigate   = useNavigate()
   const [username, setUsername] = useState('')
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (username.trim()) signIn(username)
+    if (username.trim()) {
+      signIn(username)
+      navigate('/praticar', { replace: true })
+    }
   }
 
   return (
