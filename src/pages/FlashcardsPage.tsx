@@ -3,6 +3,23 @@ import type { Flashcard, FlashcardRating } from '../types'
 import { useData } from '../contexts/DataContext'
 import { applyRating } from '../utils/flashcardUtils'
 
+function buildFlashcardPrompt(card: Flashcard): string {
+  return `Explique este conceito de concurso de forma simples, como se estivesse ensinando pela primeira vez.
+
+Contexto: Concurso SED/SC para Professor/Pedagogia — banca FURB.
+
+Pergunta (frente do flashcard):
+${card.front}
+
+Resposta resumida (verso do flashcard):
+${card.back}
+
+Quero:
+1. Explicar o conceito com linguagem simples e exemplos práticos.
+2. Por que esse conceito é importante para a área de educação?
+3. Como memorizar de forma fácil?`
+}
+
 const RATING_CONFIG: { rating: FlashcardRating; label: string; cls: string; days: number }[] = [
   { rating: 'wrong', label: '😞 Errei',   cls: 'btn-danger',  days: 1 },
   { rating: 'hard',  label: '😬 Difícil', cls: 'btn-warning', days: 2 },
@@ -30,6 +47,13 @@ export default function FlashcardsPage() {
   const { flashcards, saveFlashcard, loading } = useData()
   const [session, setSession] = useState<Session | null>(null)
   const [tab, setTab]         = useState<'review' | 'list'>('review')
+  const [copied, setCopied]   = useState(false)
+
+  function handleCopyPrompt(card: Flashcard) {
+    navigator.clipboard.writeText(buildFlashcardPrompt(card))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
   const now = new Date().toISOString()
   const due = flashcards.filter((c) => c.due_at <= now)
@@ -139,6 +163,10 @@ export default function FlashcardsPage() {
                 </button>
               ))}
             </div>
+
+            <button className="btn btn-ghost btn-sm mt-2" onClick={() => handleCopyPrompt(current)}>
+              {copied ? '✅ Copiado!' : '💬 Pedir explicação ao ChatGPT'}
+            </button>
 
             {isFree && (
               <button className="btn btn-ghost btn-sm mt-2" onClick={() => {
