@@ -282,7 +282,7 @@ function Discursive({
 export default function PracticePage() {
   const { exams, questions: allQuestions, attempts, flashcards, saveAttempt, saveFlashcard, loading } = useData()
 
-  const [filter, setFilter]   = useState<Filter>({ examId: '', area: '', status: 'all' })
+  const [filter, setFilter]   = useState<Filter>({ examId: '', area: '', status: 'unseen' })
   const [index, setIndex]     = useState(0)
   const [answer, setAnswer]   = useState<AnswerState | null>(null)
   const [copied, setCopied]   = useState(false)
@@ -440,10 +440,10 @@ export default function PracticePage() {
           <label>Status</label>
           <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginTop: '.35rem' }}>
             {([
-              ['all',     '📋 Todas'],
               ['unseen',  '⬜ Não respondidas'],
               ['correct', '✅ Acertadas'],
               ['wrong',   '❌ Erradas'],
+              ['all',     '📋 Todas'],
             ] as const).map(([val, label]) => (
               <button
                 key={val}
