@@ -36,24 +36,67 @@ nav.navbar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
-  min-height: 56px;
+  min-height: 52px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 nav.navbar .brand {
   font-weight: 700;
   font-size: 1rem;
-  margin-right: auto;
+  flex: 1;
   white-space: nowrap;
 }
-nav.navbar a {
+.navbar-desktop-links { display: flex; align-items: center; gap: .25rem; }
+.navbar-desktop-links a {
   color: rgba(255,255,255,.85);
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius);
   font-size: 0.9rem;
   transition: background .15s;
 }
-nav.navbar a:hover,
-nav.navbar a.active { background: rgba(255,255,255,.2); color: #fff; }
+.navbar-desktop-links a:hover,
+.navbar-desktop-links a.active { background: rgba(255,255,255,.2); color: #fff; }
+.navbar-logout {
+  background: none; border: none; cursor: pointer;
+  font-size: .88rem; color: rgba(255,255,255,.8);
+  padding: .25rem .5rem; border-radius: var(--radius);
+  white-space: nowrap;
+}
+.navbar-logout:hover { color: #fff; background: rgba(255,255,255,.15); }
+
+/* ── Bottom nav (mobile) ────────────────────────── */
+.bottom-nav {
+  display: none;
+}
+@media (max-width: 640px) {
+  .navbar-desktop-links { display: none; }
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: .5rem .25rem;
+    font-size: .7rem;
+    color: var(--muted);
+    gap: .2rem;
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .bottom-nav-item.active { color: var(--brand); }
+  .bottom-nav-icon { font-size: 1.3rem; line-height: 1; }
+  .main-content { padding-bottom: 5.5rem; }
+}
 
 /* ── Cards / surfaces ───────────────────────────── */
 .card {
@@ -89,7 +132,8 @@ nav.navbar a.active { background: rgba(255,255,255,.2); color: #fff; }
 .btn-sm        { padding: .3rem .65rem; font-size: .82rem; }
 
 /* ── Form elements ──────────────────────────────── */
-textarea, select, input[type="file"] {
+textarea, select, input[type="file"],
+input[type="text"], input[type="password"], input[type="email"], input[type="number"] {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -98,7 +142,8 @@ textarea, select, input[type="file"] {
   background: var(--surface);
   color: var(--text);
 }
-textarea:focus, select:focus { outline: 2px solid var(--brand); }
+textarea:focus, select:focus,
+input[type="text"]:focus, input[type="password"]:focus { outline: 2px solid var(--brand); }
 label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: .35rem; color: var(--muted); }
 
 /* ── Alternatives ───────────────────────────────── */

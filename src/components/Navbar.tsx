@@ -5,22 +5,42 @@ export default function Navbar() {
   const { signOut, currentUser } = useAuth()
 
   return (
-    <nav className="navbar">
-      <span className="brand">📚 SED/SC Estudo</span>
-      <NavLink to="/praticar"   className={({ isActive }) => isActive ? 'active' : ''}>Praticar</NavLink>
-      <NavLink to="/flashcards" className={({ isActive }) => isActive ? 'active' : ''}>Flashcards</NavLink>
-      <NavLink to="/importar"   className={({ isActive }) => isActive ? 'active' : ''}>⚙️ Importar</NavLink>
-      <button
-        onClick={signOut}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: '.88rem', color: 'var(--muted)', padding: '.25rem .5rem',
-          borderRadius: 'var(--radius)',
-        }}
-        title={`Sair (${currentUser})`}
-      >
-        {currentUser} ↩
-      </button>
-    </nav>
+    <>
+      {/* ── Top bar ── */}
+      <nav className="navbar">
+        <span className="brand">📚 SED/SC Estudo</span>
+
+        {/* Links visíveis só no desktop */}
+        <span className="navbar-desktop-links">
+          <NavLink to="/praticar"   className={({ isActive }) => isActive ? 'active' : ''}>Praticar</NavLink>
+          <NavLink to="/flashcards" className={({ isActive }) => isActive ? 'active' : ''}>Flashcards</NavLink>
+          <NavLink to="/importar"   className={({ isActive }) => isActive ? 'active' : ''}>⚙️ Importar</NavLink>
+        </span>
+
+        <button
+          onClick={signOut}
+          className="navbar-logout"
+          title={`Sair (${currentUser})`}
+        >
+          {currentUser} ↩
+        </button>
+      </nav>
+
+      {/* ── Bottom tab bar (mobile only) ── */}
+      <nav className="bottom-nav">
+        <NavLink to="/praticar"   className={({ isActive }) => isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+          <span className="bottom-nav-icon">📝</span>
+          <span>Praticar</span>
+        </NavLink>
+        <NavLink to="/flashcards" className={({ isActive }) => isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+          <span className="bottom-nav-icon">🗂️</span>
+          <span>Flashcards</span>
+        </NavLink>
+        <NavLink to="/importar"   className={({ isActive }) => isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+          <span className="bottom-nav-icon">⚙️</span>
+          <span>Importar</span>
+        </NavLink>
+      </nav>
+    </>
   )
 }
