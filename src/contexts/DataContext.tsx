@@ -157,7 +157,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const { data } = bucket.getPublicUrl(path)
     const mediaUrl = `${data.publicUrl}?v=${Date.now()}`
-    const { error: updateError } = await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId).eq('user_id', currentUser)
+    // Atualiza para TODOS os usuários — a mídia é compartilhada entre logins.
+    const { error: updateError } = await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId)
     if (updateError) throw new Error(`Erro ao salvar URL da mídia: ${updateError.message}`)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: mediaUrl } : q)))
   }
@@ -175,7 +176,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await bucket.remove(pathsToRemove)
     }
 
-    await supabase.from('questions').update({ media_url: null }).eq('id', questionId).eq('user_id', currentUser)
+    // Remove para TODOS os usuários — a mídia é compartilhada entre logins.
+    await supabase.from('questions').update({ media_url: null }).eq('id', questionId)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: undefined } : q)))
   }
 
