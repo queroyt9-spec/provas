@@ -215,7 +215,7 @@ function MultipleChoice({
           <div className="gap-sm">
             <button className="btn btn-primary" onClick={onNext}>Próxima questão →</button>
             <button className="btn btn-ghost btn-sm" onClick={onOpenChatGPT}>
-              {opened ? '✅ Aberto!' : '💬 Explicar no ChatGPT'}
+              {opened ? '✅ Copiado!' : '💬 Pedir explicação ao ChatGPT'}
             </button>
           </div>
         </>
@@ -268,9 +268,9 @@ function Discursive({
             <div className="gap-sm">
               <button className="btn btn-primary" onClick={onNext}>Próxima questão →</button>
               <button className="btn btn-ghost btn-sm" onClick={onOpenChatGPT}>
-                {opened ? '✅ Aberto!' : '💬 Explicar no ChatGPT'}
-              </button>
-            </div>
+              {opened ? '✅ Copiado!' : '💬 Pedir explicação ao ChatGPT'}
+            </button>
+          </div>
           )}
         </>
       )}
@@ -399,8 +399,7 @@ export default function PracticePage() {
     const text = discursive
       ? buildDiscursivePrompt(current, answer.selected, correct)
       : buildMCPrompt(current, answer.selected, correct)
-    const url = `https://chatgpt.com/?q=${encodeURIComponent(text)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    navigator.clipboard.writeText(text)
     setCopied(true)
   }
 
