@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import type { ImportPayload, Exam, Question } from '../types'
 import { useData } from '../contexts/DataContext'
-import { useAuth } from '../contexts/AuthContext'
 import { downloadBackup, parseBackup } from '../utils/storage'
 
 function buildContinuationPrompt(exam: Exam): string {
@@ -562,7 +561,6 @@ function MediaManager() {
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function ImportPage() {
   const { exams, saveExam, saveQuestions, loading } = useData()
-  const { signOut } = useAuth()
 
 
   const [text, setText]       = useState('')
@@ -655,10 +653,7 @@ export default function ImportPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Importar Questões</h1>
-        <button className="btn btn-ghost btn-sm" onClick={signOut}>Sair</button>
-      </div>
+      <h1 className="page-title">Importar Questões</h1>
 
       <BackupCard />
 
