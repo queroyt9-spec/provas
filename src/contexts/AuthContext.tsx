@@ -1,36 +1,36 @@
 import { createContext, useContext, useState } from 'react'
 
-// Senha padrão. Para trocar, altere VITE_APP_PASSWORD nas variáveis do Vercel.
-const APP_PASSWORD = (import.meta.env.VITE_APP_PASSWORD as string | undefined) || 'sedsc2026'
-const SESSION_KEY  = 'aqui:auth'
+const SESSION_KEY = 'aqui:user'
 
 type AuthContextValue = {
   loggedIn: boolean
-  signIn: (password: string) => boolean
+  currentUser: string
+  signIn: (username: string) => void
   signOut: () => void
 }
 
 const AuthContext = createContext<AuthContextValue>(null!)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [loggedIn, setLoggedIn] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
+  const [currentUser, setCurrentUser] = useState<string>(
+    () => sessionStorage.getItem(SESSION_KEY) ?? ''
+  )
 
-  function signIn(password: string): boolean {
-    if (password === APP_PASSWORD) {
-      sessionStorage.setItem(SESSION_KEY, '1')
-      setLoggedIn(true)
-      return true
-    }
-    return false
+  const loggedIn = currentUser !== ''
+
+  function signIn(username: string) {
+    const key = username.trim().toLowerCase()
+    sessionStorage.setItem(SESSION_KEY, key)
+    setCurrentUser(key)
   }
 
   function signOut() {
     sessionStorage.removeItem(SESSION_KEY)
-    setLoggedIn(false)
+    setCurrentUser('')
   }
 
   return (
-    <AuthContext.Provider value={{ loggedIn, signIn, signOut }}>
+    <AuthContext.Provider value={{ loggedIn, currentUser, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

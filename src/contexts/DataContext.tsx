@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Exam, Question, Attempt, Flashcard } from '../types'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './AuthContext'
 
 export type BackupData = {
   version: 1
@@ -63,6 +64,8 @@ function normalizeQuestion(q: Question): Question {
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAuth()
+
   const [exams, setExams]           = useState<Exam[]>([])
   const [questions, setQuestions]   = useState<Question[]>([])
   const [attempts, setAttempts]     = useState<Attempt[]>([])
@@ -74,10 +77,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     setDbError('')
     const [{ data: e, error: eErr }, { data: q }, { data: a }, { data: f }] = await Promise.all([
-      supabase.from('exams').select('*').order('year', { ascending: false }),
-      supabase.from('questions').select('*'),
-      supabase.from('attempts').select('*'),
-      supabase.from('flashcards').select('*'),
+      supabase.from('exams').select('*').eq('user_id', currentUser).order('year', { ascending: false }),
+      supabase.from('questions').select('*').eq('user_id', currentUser),
+      supabase.from('attempts').select('*').eq('user_id', currentUser),
+      supabase.from('flashcards').select('*').eq('user_id', currentUser),
     ])
     if (eErr) {
       setDbError(`Erro ao carregar dados do Supabase: ${eErr.message}. Verifique se as tabelas foram criadas (execute o supabase-setup.sql).`)
@@ -87,12 +90,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setAttempts(a ?? [])
     setFlashcards(f ?? [])
     setLoading(false)
-  }, [])
+  }, [currentUser])
 
   useEffect(() => { loadAll() }, [loadAll])
 
   async function saveExam(exam: Exam): Promise<void> {
-    const { error } = await supabase.from('exams').upsert(exam)
+    const row = { ...exam, user_id: currentUser }
+    const { error } = await supabase.from('exams').upsert(row)
     if (error) throw new Error(`Erro ao salvar prova: ${error.message}`)
     setExams((prev) => {
       const idx = prev.findIndex((e) => e.id === exam.id)
@@ -101,7 +105,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function saveQuestions(incoming: Question[]): Promise<void> {
-    const { error } = await supabase.from('questions').upsert(incoming)
+    const rows = incoming.map((q) => ({ ...q, user_id: currentUser }))
+    const { error } = await supabase.from('questions').upsert(rows)
     if (error) throw new Error(`Erro ao salvar questões: ${error.message}`)
     setQuestions((prev) => {
       const map = new Map(prev.map((q) => [q.id, q]))
@@ -111,12 +116,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function saveAttempt(attempt: Attempt): Promise<void> {
-    await supabase.from('attempts').insert(attempt)
+    await supabase.from('attempts').insert({ ...attempt, user_id: currentUser })
     setAttempts((prev) => [...prev, attempt])
   }
 
   async function saveFlashcard(card: Flashcard): Promise<void> {
-    await supabase.from('flashcards').upsert(card)
+    await supabase.from('flashcards').upsert({ ...card, user_id: currentUser })
     setFlashcards((prev) => {
       const idx = prev.findIndex((c) => c.id === card.id)
       return idx >= 0 ? prev.map((c, i) => (i === idx ? card : c)) : [...prev, card]
@@ -152,7 +157,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const { data } = bucket.getPublicUrl(path)
     const mediaUrl = `${data.publicUrl}?v=${Date.now()}`
-    const { error: updateError } = await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId)
+    const { error: updateError } = await supabase.from('questions').update({ media_url: mediaUrl }).eq('id', questionId).eq('user_id', currentUser)
     if (updateError) throw new Error(`Erro ao salvar URL da mídia: ${updateError.message}`)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: mediaUrl } : q)))
   }
@@ -170,19 +175,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await bucket.remove(pathsToRemove)
     }
 
-    await supabase.from('questions').update({ media_url: null }).eq('id', questionId)
+    await supabase.from('questions').update({ media_url: null }).eq('id', questionId).eq('user_id', currentUser)
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, media_url: undefined } : q)))
   }
 
   async function importAll(data: BackupData) {
-    await supabase.from('exams').upsert(data.exams)
-    await supabase.from('questions').upsert(data.questions.map(normalizeQuestion))
-    await supabase.from('flashcards').upsert(data.flashcards)
+    const examRows      = data.exams.map((e) => ({ ...e, user_id: currentUser }))
+    const questionRows  = data.questions.map((q) => ({ ...normalizeQuestion(q), user_id: currentUser }))
+    const flashcardRows = data.flashcards.map((f) => ({ ...f, user_id: currentUser }))
+
+    await supabase.from('exams').upsert(examRows)
+    await supabase.from('questions').upsert(questionRows)
+    await supabase.from('flashcards').upsert(flashcardRows)
 
     const existingIds = new Set(attempts.map((a) => a.id))
     const newAttempts = (data.attempts ?? []).filter((a) => !existingIds.has(a.id))
     if (newAttempts.length > 0) {
-      await supabase.from('attempts').insert(newAttempts)
+      await supabase.from('attempts').insert(newAttempts.map((a) => ({ ...a, user_id: currentUser })))
     }
 
     await loadAll()

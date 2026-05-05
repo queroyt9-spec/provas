@@ -35,7 +35,7 @@ function NotConfigured() {
             <li>Clique em <strong>Redeploy</strong> no Vercel.</li>
           </ol>
           <p style={{ marginTop: '1rem', fontSize: '.88rem', color: '#6b7280' }}>
-            A senha padrão para entrar é <strong>sedsc2026</strong>. Para trocar, adicione a variável <code>VITE_APP_PASSWORD</code> no Vercel.
+            O acesso é por usuário. Qualquer nome digitado na tela de login cria/acessa os dados daquele usuário.
           </p>
         </div>
       </div>

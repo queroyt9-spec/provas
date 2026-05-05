@@ -57,8 +57,17 @@ create table if not exists flashcards (
   created_at      timestamptz default now()
 );
 
--- 2. Sem RLS — acesso aberto via anon key ─────────────────────
--- O app usa senha local para proteger o acesso.
+-- 2. Coluna user_id em todas as tabelas ──────────────────────
+-- Separa os dados por usuário logado no app.
+-- Execute mesmo se as tabelas já existirem (ALTER TABLE é seguro).
+
+alter table exams      add column if not exists user_id text not null default 'admin';
+alter table questions  add column if not exists user_id text not null default 'admin';
+alter table attempts   add column if not exists user_id text not null default 'admin';
+alter table flashcards add column if not exists user_id text not null default 'admin';
+
+-- 3. Sem RLS — acesso aberto via anon key ─────────────────────
+-- O app usa usuário local para separar os dados.
 
 -- 3. Storage bucket ───────────────────────────────────────────
 -- No painel Storage > New bucket:
