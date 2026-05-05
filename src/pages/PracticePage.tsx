@@ -180,19 +180,21 @@ function MultipleChoice({
   const submitted = !!answer?.submitted
   return (
     <>
-      {Object.entries(question.alternatives).map(([letter, text]) => {
-        let cls = 'alternative-btn'
-        if (submitted) {
-          if (letter === question.correct_answer) cls += ' correct'
-          else if (letter === answer?.selected) cls += ' wrong'
-        } else if (answer?.selected === letter) cls += ' selected'
-        return (
-          <button key={letter} className={cls} onClick={() => onSelect(letter)} disabled={submitted}>
-            <span className="letter">{letter}</span>
-            <span>{text}</span>
-          </button>
-        )
-      })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', marginBottom: '.25rem' }}>
+        {Object.entries(question.alternatives).map(([letter, text]) => {
+          let cls = 'alternative-btn'
+          if (submitted) {
+            if (letter === question.correct_answer) cls += ' correct'
+            else if (letter === answer?.selected) cls += ' wrong'
+          } else if (answer?.selected === letter) cls += ' selected'
+          return (
+            <button key={letter} className={cls} onClick={() => onSelect(letter)} disabled={submitted}>
+              <span className="letter">{letter.toLowerCase()})</span>
+              <span style={{ lineHeight: '1.6', textAlign: 'left' }}>{text}</span>
+            </button>
+          )
+        })}
+      </div>
       {!submitted && (
         <button className="btn btn-primary mt-2" onClick={onSubmit} disabled={!answer?.selected}>
           Confirmar resposta
@@ -479,7 +481,16 @@ export default function PracticePage() {
           {current.has_media && <QuestionMedia question={current} />}
           {current.has_media && !current.media_url && <MediaMissingBanner onSkip={handleNext} />}
 
-          <p style={{ lineHeight: '1.65', marginBottom: '1rem', fontSize: '.97rem', whiteSpace: 'pre-wrap' }}>
+          <p style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '.6rem', color: 'var(--text)' }}>
+            Questão {current.number}
+          </p>
+          <p style={{
+            lineHeight: '1.75',
+            marginBottom: '1.25rem',
+            fontSize: '.97rem',
+            whiteSpace: 'pre-wrap',
+            textAlign: 'justify',
+          }}>
             {current.statement}
           </p>
 
