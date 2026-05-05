@@ -44,6 +44,15 @@ function getFileExtension(file: File): string {
   return byMime[file.type] ?? 'bin'
 }
 
+function hashQuestionId(input: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 function normalizeQuestion(q: Question): Question {
   return {
     ...q,
@@ -118,14 +127,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const bucket = supabase.storage.from('question-media')
     const ext = getFileExtension(file)
     const baseFolder = 'media'
-    const baseName = questionId
+    const objectStem = `q_${hashQuestionId(questionId)}`
 
     // Remove versões antigas da mídia dessa questão para evitar URL quebrada por troca de extensão.
     const { data: existingFiles, error: listError } = await bucket.list(baseFolder)
     if (listError) throw new Error(`Erro ao listar mídias: ${listError.message}`)
 
     const oldPaths = (existingFiles ?? [])
-      .filter((f) => f.name === baseName || f.name.startsWith(`${baseName}.`))
+      .filter((f) => f.name === objectStem || f.name.startsWith(`${objectStem}.`))
       .map((f) => `${baseFolder}/${f.name}`)
 
     if (oldPaths.length > 0) {
@@ -133,7 +142,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (removeOldError) throw new Error(`Erro ao remover mídia antiga: ${removeOldError.message}`)
     }
 
-    const path = `${baseFolder}/${baseName}.${ext}`
+    const path = `${baseFolder}/${objectStem}.${ext}`
     const { error: uploadError } = await bucket.upload(path, file, {
       upsert: true,
       contentType: file.type || undefined,
@@ -151,10 +160,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   async function deleteMedia(questionId: string): Promise<void> {
     const bucket = supabase.storage.from('question-media')
     const baseFolder = 'media'
-    const baseName = questionId
+    const objectStem = `q_${hashQuestionId(questionId)}`
     const { data: existingFiles } = await bucket.list(baseFolder)
     const pathsToRemove = (existingFiles ?? [])
-      .filter((f) => f.name === baseName || f.name.startsWith(`${baseName}.`))
+      .filter((f) => f.name === objectStem || f.name.startsWith(`${objectStem}.`))
       .map((f) => `${baseFolder}/${f.name}`)
 
     if (pathsToRemove.length > 0) {

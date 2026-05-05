@@ -404,6 +404,7 @@ function MediaManager() {
   const [previews, setPreviews]   = useState<Record<string, boolean>>({})
   const [uploading, setUploading] = useState<string | null>(null)
   const [filter, setFilter]       = useState<'all' | 'missing' | 'done'>('all')
+  const [mediaError, setMediaError] = useState('')
 
   if (mediaQuestions.length === 0) return null
 
@@ -418,9 +419,13 @@ function MediaManager() {
   })
 
   async function handleUpload(q: Question, file: File) {
+    setMediaError('')
     setUploading(q.id)
     try {
       await saveMedia(q.id, file)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setMediaError(`Falha no upload da imagem da Q${q.number}: ${msg}`)
     } finally {
       setUploading(null)
     }
@@ -457,6 +462,11 @@ function MediaManager() {
 
       {filtered.length === 0 && (
         <p className="muted" style={{ fontSize: '.88rem' }}>Nenhuma questão nesta categoria.</p>
+      )}
+      {mediaError && (
+        <div className="feedback wrong" style={{ marginBottom: '.75rem', whiteSpace: 'pre-wrap' }}>
+          ❌ {mediaError}
+        </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
