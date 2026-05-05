@@ -417,8 +417,6 @@ export default function PracticePage() {
     <div>
       <h1 className="page-title">Praticar Questões</h1>
 
-      <div key={tick}><ExamProgress /></div>
-
       <div className="card mb-2">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
           <div>
@@ -475,7 +473,7 @@ export default function PracticePage() {
         </div>
       ) : (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem', gap: '.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem', gap: '.5rem', flexWrap: 'wrap' }}>
             <div className="gap-sm" style={{ alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
               <span className="counter">Questão {index + 1} de {questions.length}</span>
               {discursive && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>}
@@ -483,7 +481,7 @@ export default function PracticePage() {
               {current.topic && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>{current.topic}</span>}
               <QuestionHistory questionId={current.id} />
             </div>
-            <div style={{ display: 'flex', gap: '.3rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={handlePrev}
@@ -543,6 +541,8 @@ export default function PracticePage() {
           )}
         </div>
       )}
+
+      <div key={tick} className="mt-2"><ExamProgress /></div>
     </div>
   )
 }
