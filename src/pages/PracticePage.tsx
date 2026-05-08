@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import type { Question, Attempt } from '../types'
 import { useData } from '../contexts/DataContext'
 import { createFlashcardFromQuestion } from '../utils/flashcardUtils'
@@ -6,6 +6,16 @@ import { createFlashcardFromQuestion } from '../utils/flashcardUtils'
 type StatusFilter = 'all' | 'unseen' | 'correct' | 'wrong'
 type Filter = { examId: string; area: string; status: StatusFilter }
 type AnswerState = { selected: string; submitted: boolean; showModel?: boolean }
+
+function applyFilter(qs: Question[], f: Filter, lr: Map<string, boolean>): Question[] {
+  let result = qs
+  if (f.examId) result = result.filter((q) => q.exam_id === f.examId)
+  if (f.area)   result = result.filter((q) => q.area === f.area)
+  if (f.status === 'unseen')  result = result.filter((q) => !lr.has(q.id))
+  if (f.status === 'correct') result = result.filter((q) => lr.get(q.id) === true)
+  if (f.status === 'wrong')   result = result.filter((q) => lr.get(q.id) === false)
+  return result
+}
 
 function isDiscursive(q: Question) {
   return q.type === 'discursive' || Object.keys(q.alternatives).length === 0
@@ -282,12 +292,15 @@ function Discursive({
 export default function PracticePage() {
   const { exams, questions: allQuestions, attempts, flashcards, saveAttempt, saveFlashcard, loading } = useData()
 
-  const [filter, setFilter]   = useState<Filter>({ examId: '', area: '', status: 'unseen' })
-  const [index, setIndex]     = useState(0)
-  const [answer, setAnswer]   = useState<AnswerState | null>(null)
-  const [copied, setCopied]   = useState(false)
-  const [tick, setTick]       = useState(0)
-  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
+  const [filter, setFilter]       = useState<Filter>({ examId: '', area: '', status: 'unseen' })
+  const [index, setIndex]         = useState(0)
+  const [answer, setAnswer]       = useState<AnswerState | null>(null)
+  const [copied, setCopied]       = useState(false)
+  const [tick, setTick]           = useState(0)
+  const [lastCorrect, setLastCorrect]     = useState<boolean | null>(null)
+  // Snapshot da lista — congela ao iniciar e só atualiza quando o filtro muda explicitamente.
+  const [sessionQuestions, setSessionQuestions] = useState<Question[]>([])
+  const sessionInitialized = useRef(false)
 
   const lastResult = useMemo(() => {
     const map = new Map<string, boolean>()
@@ -300,17 +313,16 @@ export default function PracticePage() {
     return [...new Set(base.map((q) => q.area).filter(Boolean))]
   }, [allQuestions, filter.examId])
 
-  const questions = useMemo(() => {
-    let qs = allQuestions
-    if (filter.examId) qs = qs.filter((q) => q.exam_id === filter.examId)
-    if (filter.area)   qs = qs.filter((q) => q.area === filter.area)
-    if (filter.status === 'unseen')  qs = qs.filter((q) => !lastResult.has(q.id))
-    if (filter.status === 'correct') qs = qs.filter((q) => lastResult.get(q.id) === true)
-    if (filter.status === 'wrong')   qs = qs.filter((q) => lastResult.get(q.id) === false)
-    return qs
-  }, [allQuestions, filter, lastResult])
+  // Inicializa o snapshot uma única vez quando os dados carregam.
+  useEffect(() => {
+    if (!loading && !sessionInitialized.current) {
+      sessionInitialized.current = true
+      setSessionQuestions(applyFilter(allQuestions, filter, lastResult))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, allQuestions.length])
 
-  const current: Question | undefined = questions[index]
+  const current: Question | undefined = sessionQuestions[index]
   const discursive = current ? isDiscursive(current) : false
 
   if (loading) {
@@ -335,7 +347,9 @@ export default function PracticePage() {
   }
 
   function handleFilterChange(key: keyof Filter, value: string) {
-    setFilter((f) => ({ ...f, [key]: value, ...(key === 'examId' ? { area: '' } : {}) }))
+    const newFilter: Filter = { ...filter, [key]: value, ...(key === 'examId' ? { area: '' } : {}) }
+    setFilter(newFilter)
+    setSessionQuestions(applyFilter(allQuestions, newFilter, lastResult))
     setIndex(0); setAnswer(null); setLastCorrect(null); setCopied(false)
   }
 
@@ -394,7 +408,7 @@ export default function PracticePage() {
   }
 
   function handleSkip() {
-    setIndex((i) => Math.min(i + 1, questions.length - 1))
+    setIndex((i) => Math.min(i + 1, sessionQuestions.length - 1))
     setAnswer(null); setCopied(false); setLastCorrect(null)
   }
 
@@ -461,12 +475,12 @@ export default function PracticePage() {
         </div>
       </div>
 
-      {questions.length === 0 ? (
+      {sessionQuestions.length === 0 ? (
         <div className="card text-center"><p className="muted">Nenhuma questão para os filtros selecionados.</p></div>
-      ) : index >= questions.length ? (
+      ) : index >= sessionQuestions.length ? (
         <div className="card text-center">
           <p style={{ fontSize: '1.5rem', marginBottom: '.5rem' }}>🎉</p>
-          <p style={{ fontWeight: 600 }}>Você respondeu todas as {questions.length} questões!</p>
+          <p style={{ fontWeight: 600 }}>Você respondeu todas as {sessionQuestions.length} questões!</p>
           <button className="btn btn-primary mt-2" onClick={() => { setIndex(0); setAnswer(null); setLastCorrect(null) }}>
             Recomeçar
           </button>
@@ -475,7 +489,7 @@ export default function PracticePage() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem', gap: '.5rem', flexWrap: 'wrap' }}>
             <div className="gap-sm" style={{ alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
-              <span className="counter">Questão {index + 1} de {questions.length}</span>
+              <span className="counter">Questão {index + 1} de {sessionQuestions.length}</span>
               {discursive && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>Discursiva</span>}
               {current.area  && <span className="badge">{current.area}</span>}
               {current.topic && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>{current.topic}</span>}
@@ -491,14 +505,14 @@ export default function PracticePage() {
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={handleSkip}
-                disabled={index >= questions.length - 1}
+                disabled={index >= sessionQuestions.length - 1}
                 title="Pular sem responder"
               >Pular →</button>
             </div>
           </div>
 
           <div className="progress-bar-wrap mb-2">
-            <div className="progress-bar" style={{ width: `${(index / questions.length) * 100}%` }} />
+            <div className="progress-bar" style={{ width: `${(index / sessionQuestions.length) * 100}%` }} />
           </div>
 
           {current.has_media && <QuestionMedia question={current} />}
